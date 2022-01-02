@@ -114,24 +114,34 @@ def get_SVHN(augment, dataroot, download):
     return image_shape, num_classes, train_dataset, test_dataset
 
 def transform_cluster_to_image(data_input):
-    log_dir = '/home/dsi/eyalbetzalel/pytorch-generative-v6/image_test'
     pathToCluster = r"/home/dsi/eyalbetzalel/image-gpt/downloads/kmeans_centers.npy"
     clusters = torch.from_numpy(np.load(pathToCluster)).float()
     data = torch.reshape(torch.from_numpy(data_input), [-1, 32, 32])
     # train = train[:,None,:,:]
-    sample = torch.reshape(torch.round(127.5 * (clusters[data.long()] + 1.0)), [data.shape[0], 3, 32, 32]).to('cuda')
+    # sample = torch.reshape(torch.round(127.5 * (clusters[data.long()] + 1.0)), [data.shape[0],3 ,32, 32]).to('cuda')
+    import ipdb; ipdb.set_trace()
+    sample = torch.reshape(clusters[data.long()], [data.shape[0],3 ,32, 32]).to('cuda')
     return sample
 
-def get_GMMSD(path_train, path_test):
-
-    with h5py.File(path_train, "r") as f:
-        a_group_key = list(f.keys())[0]
-        train = list(f[a_group_key])
-    with h5py.File(path_test, "r") as f:
-        a_group_key = list(f.keys())[0]
-        test = list(f[a_group_key])
-    test_images = transform_cluster_to_image(test)
-    train_images = transform_cluster_to_image(train)
-    import ipdb; ipdb.set_trace()
-    return train_images, test_images
+def get_GMMSD(augment, dataroot, download, batch_size):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    image_shape = (32, 32, 3)
+    num_classes = 1  # Not real value. TODO : Check if this is relevant. 
+    dataset = np.load(dataroot)
+    images_cluster = dataset[:,:1024]
+    ll = dataset[:,-1]
+    images = transform_cluster_to_image(images_cluster)
+    ind = int(images.shape[0]*0.7)
+    trainX = images[:ind]
+    # trainY = torch.tensor(ll[:ind], device=device)
+    trainY = torch.ones(trainX.shape[0])
+    testX = images[ind+1:]
+    # testY = torch.tensor(ll[ind+1:], device=device)
+    testY = torch.ones(testX.shape[0])
+    train_dataset = torch.utils.data.TensorDataset(trainX, trainY)
+    test_dataset = torch.utils.data.TensorDataset(testX, testY)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size = batch_size)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size = batch_size)
+    "/home/dsi/eyalbetzalel/GlowGAN/data/gmmsd.npy"
+    return image_shape, num_classes, train_loader, test_loader
 

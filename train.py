@@ -15,7 +15,7 @@ from ignite.engine import Engine, Events
 from ignite.handlers import ModelCheckpoint, Timer
 from ignite.metrics import RunningAverage, Loss
 
-from datasets import get_CIFAR10, get_SVHN
+from datasets import get_CIFAR10, get_SVHN, get_GMMSD
 from model import Glow
 
 
@@ -27,14 +27,16 @@ def check_manual_seed(seed):
     print("Using seed: {seed}".format(seed=seed))
 
 
-def check_dataset(dataset, dataroot, augment, download):
+def check_dataset(dataset, dataroot, augment, download, batch_size):
     if dataset == "cifar10":
         cifar10 = get_CIFAR10(augment, dataroot, download)
         input_size, num_classes, train_dataset, test_dataset = cifar10
     if dataset == "svhn":
         svhn = get_SVHN(augment, dataroot, download)
         input_size, num_classes, train_dataset, test_dataset = svhn
-
+    if dataset == "gmmsd":
+        gmmsd = get_GMMSD(augment, dataroot, download, batch_size)
+        input_size, num_classes, train_dataset, test_dataset = gmmsd
     return input_size, num_classes, train_dataset, test_dataset
 
 
@@ -106,26 +108,31 @@ def main(
 
     check_manual_seed(seed)
 
-    ds = check_dataset(dataset, dataroot, augment, download)
+    ds = check_dataset(dataset, dataroot, augment, download, batch_size)
     image_shape, num_classes, train_dataset, test_dataset = ds
 
     # Note: unsupported for now
     multi_class = False
-
-    train_loader = data.DataLoader(
-        train_dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=n_workers,
-        drop_last=True,
-    )
-    test_loader = data.DataLoader(
-        test_dataset,
-        batch_size=eval_batch_size,
-        shuffle=False,
-        num_workers=n_workers,
-        drop_last=False,
-    )
+    if dataset != 'gmmsd' :
+        train_loader = data.DataLoader(
+            train_dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=n_workers,
+            drop_last=True,
+        )
+        test_loader = data.DataLoader(
+            test_dataset,
+            batch_size=eval_batch_size,
+            shuffle=False,
+            num_workers=n_workers,
+            drop_last=False,
+        )
+        
+    else : 
+    
+        test_loader = test_dataset
+        train_loader = train_dataset   
 
     model = Glow(
         image_shape,
@@ -268,7 +275,6 @@ def main(
                 init_targets = torch.cat(init_targets).to(device)
             else:
                 init_targets = None
-
             model(init_batches, init_targets)
 
     @trainer.on(Events.EPOCH_COMPLETED)
@@ -307,12 +313,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset",
         type=str,
-        default="cifar10",
-        choices=["cifar10", "svhn"],
+        default="gmmsd",
+        choices=["cifar10", "svhn", "gmmsd"],
         help="Type of the dataset to be used.",
     )
 
-    parser.add_argument("--dataroot", type=str, default="./", help="path to dataset")
+    parser.add_argument("--dataroot", type=str, default="/home/dsi/eyalbetzalel/GlowGAN/data/gmmsd.npy", help="path to dataset")
 
     parser.add_argument("--download", action="store_true", help="downloads dataset")
 
@@ -388,7 +394,7 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--n_workers", type=int, default=6, help="number of data loading workers"
+        "--n_workers", type=int, default=1, help="number of data loading workers"
     )
 
     parser.add_argument(
@@ -451,6 +457,10 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=0, help="manual seed")
 
     args = parser.parse_args()
+    
+    dirpath = './output'
+    if os.path.exists(dirpath) and os.path.isdir(dirpath):
+      shutil.rmtree(dirpath)
 
     try:
         os.makedirs(args.output_dir)
@@ -470,5 +480,7 @@ if __name__ == "__main__":
 
     with open(os.path.join(args.output_dir, "hparams.json"), "w") as fp:
         json.dump(kwargs, fp, sort_keys=True, indent=4)
+    
 
+    
     main(**kwargs)
