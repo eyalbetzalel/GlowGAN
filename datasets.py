@@ -115,7 +115,6 @@ def get_SVHN(augment, dataroot, download):
 
 def transform_cluster_to_image(data):
     log_dir = '/home/dsi/eyalbetzalel/pytorch-generative-v6/image_test'
-    _summary_writer = tensorboard.SummaryWriter(log_dir, max_queue=100)
     pathToCluster = r"/home/dsi/eyalbetzalel/image-gpt/downloads/kmeans_centers.npy"
     clusters = torch.from_numpy(np.load(pathToCluster)).float()
     data = torch.reshape(torch.from_numpy(train), [-1, 32, 32])
