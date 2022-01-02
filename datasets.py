@@ -3,7 +3,7 @@ from pathlib import Path
 import torch
 import torch.nn.functional as F
 import h5py
-
+import numpy as np
 from torchvision import transforms, datasets
 
 n_bits = 8
