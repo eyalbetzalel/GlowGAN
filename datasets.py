@@ -2,6 +2,7 @@ from pathlib import Path
 
 import torch
 import torch.nn.functional as F
+import h5py
 
 from torchvision import transforms, datasets
 
@@ -111,3 +112,27 @@ def get_SVHN(augment, dataroot, download):
     )
 
     return image_shape, num_classes, train_dataset, test_dataset
+
+    def transform_cluster_to_image(data):
+        log_dir = '/home/dsi/eyalbetzalel/pytorch-generative-v6/image_test'
+        _summary_writer = tensorboard.SummaryWriter(log_dir, max_queue=100)
+        pathToCluster = r"/home/dsi/eyalbetzalel/image-gpt/downloads/kmeans_centers.npy"
+        clusters = torch.from_numpy(np.load(pathToCluster)).float()
+        data = torch.reshape(torch.from_numpy(train), [-1, 32, 32])
+        # train = train[:,None,:,:]
+        sample = torch.reshape(torch.round(127.5 * (clusters[data.long()] + 1.0)), [data.shape[0], 3, 32, 32]).to('cuda')
+        return sample
+
+    def get_GMMSD(path_train, path_test):
+
+        with h5py.File(path_train, "r") as f:
+            a_group_key = list(f.keys())[0]
+            train = list(f[a_group_key])
+        with h5py.File(path_test, "r") as f:
+            a_group_key = list(f.keys())[0]
+            test = list(f[a_group_key])
+        test_images = transform_cluster_to_image(test)
+        train_images = transform_cluster_to_image(train)
+        import ipdb; ipdb.set_trace()
+        return train_images, test_images
+
