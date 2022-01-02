@@ -113,11 +113,11 @@ def get_SVHN(augment, dataroot, download):
 
     return image_shape, num_classes, train_dataset, test_dataset
 
-def transform_cluster_to_image(data):
+def transform_cluster_to_image(data_input):
     log_dir = '/home/dsi/eyalbetzalel/pytorch-generative-v6/image_test'
     pathToCluster = r"/home/dsi/eyalbetzalel/image-gpt/downloads/kmeans_centers.npy"
     clusters = torch.from_numpy(np.load(pathToCluster)).float()
-    data = torch.reshape(torch.from_numpy(train), [-1, 32, 32])
+    data = torch.reshape(torch.from_numpy(data_input), [-1, 32, 32])
     # train = train[:,None,:,:]
     sample = torch.reshape(torch.round(127.5 * (clusters[data.long()] + 1.0)), [data.shape[0], 3, 32, 32]).to('cuda')
     return sample
