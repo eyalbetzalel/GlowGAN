@@ -24,6 +24,7 @@ def preprocess(x):
 
 
 def postprocess(x):
+    x = x / 2
     x = torch.clamp(x, -0.5, 0.5)
     x += 0.5
     x = x * 2 ** n_bits
@@ -131,8 +132,8 @@ def get_GMMSD(augment, dataroot, download, batch_size):
     ll = dataset[:,-1]
     images = transform_cluster_to_image(images_cluster)
     ind = int(images.shape[0]*0.7)
-    # trainX = images[:ind]
-    trainX = images[:1024]
+    trainX = images[:ind]
+    # trainX = images[:1024]
     # trainY = torch.tensor(ll[:ind], device=device)
     trainY = torch.ones(trainX.shape[0])
     testX = images[ind+1:]
@@ -142,6 +143,5 @@ def get_GMMSD(augment, dataroot, download, batch_size):
     test_dataset = torch.utils.data.TensorDataset(testX, testY)
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size = batch_size)
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size = batch_size)
-    "/home/dsi/eyalbetzalel/GlowGAN/data/gmmsd.npy"
     return image_shape, num_classes, train_loader, test_loader
 

@@ -1,6 +1,10 @@
 ################################################################################
 # Imports: 
 
+import wandb
+from torchvision.utils import make_grid
+import matplotlib.pyplot as plt
+
 # WP - GAN :
 
 import argparse
@@ -160,6 +164,7 @@ def main(
         y_condition,
     )
     
+    wandb.config = {"learning_rate": lr, "epochs": n_epochs, "batch_size": 64}
     discriminator = Discriminator(img_shape)
 
     if cuda:
@@ -244,6 +249,11 @@ def main(
             optimizer_D.step()
 
             optimizer_G.zero_grad()
+            
+            wandb.log({"d_loss": d_loss})
+            wandb.log({"d_epoch": epoch})
+            wandb.log({"d_batch": i})
+
 
             # Train the generator every n_critic steps
             if i % n_critic == 0:
@@ -268,10 +278,24 @@ def main(
                     % (epoch, n_epochs, i, len(train_loader), d_loss.item(), g_loss.item())
                 )
 
+                
                 if batches_done % sample_interval == 0:
-                    save_image(fake_imgs.data[:25], "images/%d.png" % batches_done, nrow=5, normalize=True)
+                    
+                    fake_imgs = postprocess(fake_imgs)
+                    grid = make_grid(fake_imgs[:30], nrow=6).permute(1,2,0)
+                    
+                    plt.figure(figsize=(10,10))
+                    plt.imsave("./images/sample_glow_batch_%d.png" % batches_done, grid.cpu().numpy())
 
-                batches_done += n_critic
+                    
+                    caption_str = "Epoch : " + str(epoch)
+                    images = wandb.Image(grid.cpu().numpy(), caption=caption_str)
+                    wandb.log({"examples": images})
+
+                batches_done = batches_done + n_critic
+                wandb.log({"g_loss": g_loss})
+                wandb.log({"g_epoch": epoch})
+                wandb.log({"g_batch": i})
 
 ################################################################################
 
@@ -282,7 +306,7 @@ if __name__ == "__main__":
     # WP-GAN : 
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--n_epochs", type=int, default=20, help="number of epochs of training")
+    parser.add_argument("--n_epochs", type=int, default=2000, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=64, help="size of the batches")
     parser.add_argument("--lr", type=float, default=0.0002, help="adam: learning rate")
     parser.add_argument("--b1", type=float, default=0.5, help="adam: decay of first order momentum of gradient")
@@ -293,7 +317,7 @@ if __name__ == "__main__":
     parser.add_argument("--channels", type=int, default=3, help="number of image channels")
     parser.add_argument("--n_critic", type=int, default=5, help="number of training steps for discriminator per iter")
     parser.add_argument("--clip_value", type=float, default=0.01, help="lower and upper clip value for disc. weights")
-    parser.add_argument("--sample_interval", type=int, default=1, help="interval betwen image samples")
+    parser.add_argument("--sample_interval", type=int, default=400, help="interval betwen image samples")
 
     # GLOW : 
 
@@ -440,6 +464,8 @@ if __name__ == "__main__":
         default="",
         help="Path to optimizer to load for continuing training",
     )
+
+    wandb.init(project="GlowGAN", entity="eyalb")
 
     parser.add_argument("--seed", type=int, default=0, help="manual seed")
 
