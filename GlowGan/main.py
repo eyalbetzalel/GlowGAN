@@ -160,7 +160,7 @@ def main(
         y_condition,
     )
     
-    discriminator = Discriminator()
+    discriminator = Discriminator(img_shape)
 
     if cuda:
         generator.cuda()
@@ -183,7 +183,7 @@ def main(
         model = model.eval()
         with torch.no_grad():
             y = None
-            images = postprocess(model(y_onehot=y, temperature=1, reverse=True))
+            images = model(y_onehot=y, temperature=1, reverse=True)
 
         return images
 
@@ -293,7 +293,7 @@ if __name__ == "__main__":
     parser.add_argument("--channels", type=int, default=3, help="number of image channels")
     parser.add_argument("--n_critic", type=int, default=5, help="number of training steps for discriminator per iter")
     parser.add_argument("--clip_value", type=float, default=0.01, help="lower and upper clip value for disc. weights")
-    parser.add_argument("--sample_interval", type=int, default=400, help="interval betwen image samples")
+    parser.add_argument("--sample_interval", type=int, default=1, help="interval betwen image samples")
 
     # GLOW : 
 

@@ -160,7 +160,7 @@ for epoch in range(opt.n_epochs):
 
         # Generate a batch of images
         fake_imgs = generator(z)
-
+        import ipdb; ipdb.set_trace()
         # Real images
         real_validity = discriminator(real_imgs)
         # Fake images

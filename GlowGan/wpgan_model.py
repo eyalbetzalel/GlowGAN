@@ -28,7 +28,7 @@ class Generator(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self):
+    def __init__(self, img_shape):
         super(Discriminator, self).__init__()
 
         self.model = nn.Sequential(

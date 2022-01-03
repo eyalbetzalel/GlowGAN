@@ -247,8 +247,8 @@ class Glow(nn.Module):
         if data is not None:
             h = self.prior_h.repeat(data.shape[0], 1, 1, 1)
         else:
-            # Hardcoded a batch size of 32 here
-            h = self.prior_h.repeat(32, 1, 1, 1)
+            # Hardcoded a batch size of 64 here
+            h = self.prior_h.repeat(64, 1, 1, 1)
 
         channels = h.size(1)
 

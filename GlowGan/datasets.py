@@ -119,7 +119,6 @@ def transform_cluster_to_image(data_input):
     data = torch.reshape(torch.from_numpy(data_input), [-1, 32, 32])
     # train = train[:,None,:,:]
     # sample = torch.reshape(torch.round(127.5 * (clusters[data.long()] + 1.0)), [data.shape[0],3 ,32, 32]).to('cuda')
-    import ipdb; ipdb.set_trace()
     sample = torch.reshape(clusters[data.long()], [data.shape[0],3 ,32, 32]).to('cuda')
     return sample
 
@@ -132,7 +131,8 @@ def get_GMMSD(augment, dataroot, download, batch_size):
     ll = dataset[:,-1]
     images = transform_cluster_to_image(images_cluster)
     ind = int(images.shape[0]*0.7)
-    trainX = images[:ind]
+    # trainX = images[:ind]
+    trainX = images[:1024]
     # trainY = torch.tensor(ll[:ind], device=device)
     trainY = torch.ones(trainX.shape[0])
     testX = images[ind+1:]
