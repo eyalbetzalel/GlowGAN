@@ -164,7 +164,11 @@ def main(
         y_condition,
     )
     
+    
+    
     wandb.config = {"learning_rate": lr, "epochs": n_epochs, "batch_size": 64}
+    # Switch GLOW by regular generator : 
+    generator = Generator(img_shape, latent_dim)
     discriminator = Discriminator(img_shape)
 
     if cuda:
@@ -173,7 +177,7 @@ def main(
 
     # Optimizers:
     
-    optimizer_G = torch.optim.Adam(generator.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2))    
+    optimizer_G = torch.optim.Adam(generator.parameters(), lr=lr, betas=(opt.b1, opt.b2))    
 #    optimizer_G = optim.Adamax(generator.parameters(), lr=5e-4, weight_decay=5e-5)
 #    lr_lambda = lambda epoch: min(1.0, (epoch + 1) / warmup)  # noqa
 #    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer_G, lr_lambda=lr_lambda)
@@ -183,13 +187,13 @@ def main(
     Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 
     def sample_from_glow(model):
-        # TODO : Check if Glow postprocess function fit WPGAN Generator output(dimensions / normalization etc)
-        model.set_actnorm_init()
-        model = model.eval()
-        with torch.no_grad():
-            y = None
-            images = model(y_onehot=y, temperature=1, reverse=True)
-            images = images.permute(0,2,3,1)
+#        # TODO : Check if Glow postprocess function fit WPGAN Generator output(dimensions / normalization etc)
+#        model.set_actnorm_init()
+#        model = model.eval()
+#        with torch.no_grad():
+        y = None
+        images = model(y_onehot=y, temperature=1, reverse=True)
+        images = images.permute(0,2,3,1)
         return images
          
     def compute_gradient_penalty(D, real_samples, fake_samples):
@@ -234,7 +238,13 @@ def main(
             optimizer_D.zero_grad()
                         
             # Generate a batch of images
-            fake_imgs = sample_from_glow(generator)
+            # fake_imgs = sample_from_glow(generator)
+            
+            # Sample noise as generator input
+            z = Variable(Tensor(np.random.normal(0, 1, (imgs.shape[0], opt.latent_dim))))
+    
+            # Generate a batch of images
+            fake_imgs = generator(z)
             
             # Real images
             real_validity = discriminator(real_imgs)
@@ -255,17 +265,23 @@ def main(
             
             wandb.log({"d_loss": d_loss})
 
-
+            
+            
             # Train the generator every n_critic steps
             if i % n_critic == 0:
-
+                
+                generator.train()
+                
                 # -----------------
                 #  Train Generator
                 # -----------------
 
                 # Generate a batch of images
-                fake_imgs = sample_from_glow(generator)
-                generator.train()
+                # fake_imgs = sample_from_glow(generator)
+                
+                # Generate a batch of images
+                fake_imgs = generator(z)
+                
                 # Loss measures generator's ability to fool the discriminator
                 # Train on fake images
                 fake_validity = discriminator(fake_imgs)
@@ -329,7 +345,7 @@ if __name__ == "__main__":
     parser.add_argument("--latent_dim", type=int, default=100, help="dimensionality of the latent space")
     parser.add_argument("--img_size", type=int, default=32, help="size of each image dimension")
     parser.add_argument("--channels", type=int, default=3, help="number of image channels")
-    parser.add_argument("--n_critic", type=int, default=5, help="number of training steps for discriminator per iter")
+    parser.add_argument("--n_critic", type=int, default=1, help="number of training steps for discriminator per iter")
     parser.add_argument("--clip_value", type=float, default=0.01, help="lower and upper clip value for disc. weights")
     parser.add_argument("--sample_interval", type=int, default=400, help="interval betwen image samples")
 
