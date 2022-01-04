@@ -141,7 +141,7 @@ def main(
     ################################################################################
     # Train : 
 
-    img_shape = (channels, img_size, img_size)
+    img_shape = (img_size, img_size, channels)
 
     cuda = True if torch.cuda.is_available() else False
 
@@ -172,11 +172,11 @@ def main(
         discriminator.cuda()
 
     # Optimizers:
-
-    # optimizer_G = torch.optim.Adam(generator.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2))    
-    optimizer_G = optim.Adamax(generator.parameters(), lr=5e-4, weight_decay=5e-5)
-    lr_lambda = lambda epoch: min(1.0, (epoch + 1) / warmup)  # noqa
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer_G, lr_lambda=lr_lambda)
+    
+    optimizer_G = torch.optim.Adam(generator.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2))    
+#    optimizer_G = optim.Adamax(generator.parameters(), lr=5e-4, weight_decay=5e-5)
+#    lr_lambda = lambda epoch: min(1.0, (epoch + 1) / warmup)  # noqa
+#    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer_G, lr_lambda=lr_lambda)
     
     optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=lr, betas=(opt.b1, opt.b2))
 
@@ -189,10 +189,13 @@ def main(
         with torch.no_grad():
             y = None
             images = model(y_onehot=y, temperature=1, reverse=True)
-
+            images = images.permute(0,2,3,1)
         return images
-
+         
     def compute_gradient_penalty(D, real_samples, fake_samples):
+    
+        if real_samples.shape[0] < fake_samples.shape[0]:
+          fake_samples = fake_samples[:real_samples.shape[0]]
         """Calculates the gradient penalty loss for WGAN GP"""
         # Random weight term for interpolation between real and fake samples
         alpha = Tensor(np.random.random((real_samples.size(0), 1, 1, 1)))
@@ -232,7 +235,7 @@ def main(
                         
             # Generate a batch of images
             fake_imgs = sample_from_glow(generator)
-
+            
             # Real images
             real_validity = discriminator(real_imgs)
             
@@ -251,8 +254,6 @@ def main(
             optimizer_G.zero_grad()
             
             wandb.log({"d_loss": d_loss})
-            wandb.log({"d_epoch": epoch})
-            wandb.log({"d_batch": i})
 
 
             # Train the generator every n_critic steps
@@ -264,7 +265,7 @@ def main(
 
                 # Generate a batch of images
                 fake_imgs = sample_from_glow(generator)
-                
+                generator.train()
                 # Loss measures generator's ability to fool the discriminator
                 # Train on fake images
                 fake_validity = discriminator(fake_imgs)
@@ -281,21 +282,34 @@ def main(
                 
                 if batches_done % sample_interval == 0:
                     
-                    fake_imgs = postprocess(fake_imgs)
+                    # Save samples from generator : 
+                    
+                    fake_imgs = postprocess(fake_imgs).permute(0,3,1,2)
                     grid = make_grid(fake_imgs[:30], nrow=6).permute(1,2,0)
                     
                     plt.figure(figsize=(10,10))
                     plt.imsave("./images/sample_glow_batch_%d.png" % batches_done, grid.cpu().numpy())
 
-                    
                     caption_str = "Epoch : " + str(epoch)
                     images = wandb.Image(grid.cpu().numpy(), caption=caption_str)
-                    wandb.log({"examples": images})
+                    wandb.log({"Generator:": images})
+                    
+                    # Save training batch as refernce : 
+                    
+                    real_imgs = postprocess(real_imgs).permute(0,3,1,2)
+                    grid = make_grid(real_imgs[:30], nrow=6).permute(1,2,0)
+                    
+                    plt.figure(figsize=(10,10))
+                    plt.imsave("./images/gmmsd_example_batch_%d.png" % batches_done, grid.cpu().numpy())
+                
+                    caption_str = "Epoch : " + str(epoch)
+                    images = wandb.Image(grid.cpu().numpy(), caption=caption_str)
+                    wandb.log({"GMMSD:": images})
+                    
+                    
 
                 batches_done = batches_done + n_critic
                 wandb.log({"g_loss": g_loss})
-                wandb.log({"g_epoch": epoch})
-                wandb.log({"g_batch": i})
 
 ################################################################################
 
@@ -308,7 +322,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--n_epochs", type=int, default=2000, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=64, help="size of the batches")
-    parser.add_argument("--lr", type=float, default=0.0002, help="adam: learning rate")
+    parser.add_argument("--lr", type=float, default=0.0001, help="adam: learning rate")
     parser.add_argument("--b1", type=float, default=0.5, help="adam: decay of first order momentum of gradient")
     parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
     parser.add_argument("--n_cpu", type=int, default=8, help="number of cpu threads to use during batch generation")
@@ -341,12 +355,12 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--hidden_channels", type=int, default=512, help="Number of hidden channels"
+        "--hidden_channels", type=int, default=128, help="Number of hidden channels - 512"
     )
 
-    parser.add_argument("--K", type=int, default=32, help="Number of layers per block")
+    parser.add_argument("--K", type=int, default=8, help="Number of layers per block - 32 ")
 
-    parser.add_argument("--L", type=int, default=3, help="Number of blocks")
+    parser.add_argument("--L", type=int, default=1, help="Number of blocks - 3")
 
     parser.add_argument(
         "--actnorm_scale", type=float, default=1.0, help="Act norm scale"

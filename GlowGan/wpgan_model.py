@@ -40,6 +40,6 @@ class Discriminator(nn.Module):
         )
 
     def forward(self, img):
-        img_flat = img.view(img.shape[0], -1)
+        img_flat = img.contiguous().view(img.shape[0], -1)
         validity = self.model(img_flat)
         return validity

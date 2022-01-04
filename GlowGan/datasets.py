@@ -1,10 +1,10 @@
 from pathlib import Path
-
 import torch
 import torch.nn.functional as F
 import h5py
 import numpy as np
 from torchvision import transforms, datasets
+from torchvision.utils import make_grid
 
 n_bits = 8
 
@@ -114,26 +114,39 @@ def get_SVHN(augment, dataroot, download):
 
     return image_shape, num_classes, train_dataset, test_dataset
 
+#def gmmsd_save_grid(img):
+#    import ipdb; ipdb.set_trace()
+#    import matplotlib.pyplot as plt
+#    img_p = postprocess(img)
+#    yos = img_p[0]
+#    #yos = yos.permute(1,2,0)
+#    plt.imsave('test4.png', yos.cpu().numpy())
+#    return
+
 def transform_cluster_to_image(data_input):
     pathToCluster = r"/home/dsi/eyalbetzalel/image-gpt/downloads/kmeans_centers.npy"
     clusters = torch.from_numpy(np.load(pathToCluster)).float()
     data = torch.reshape(torch.from_numpy(data_input), [-1, 32, 32])
     # train = train[:,None,:,:]
     # sample = torch.reshape(torch.round(127.5 * (clusters[data.long()] + 1.0)), [data.shape[0],3 ,32, 32]).to('cuda')
-    sample = torch.reshape(clusters[data.long()], [data.shape[0],3 ,32, 32]).to('cuda')
+    # sample = torch.reshape(clusters[data.long()], [data.shape[0],3 ,32, 32]).to('cuda')
+    sample = clusters[data.long()].to('cuda')
+    # sample = sample.permute(0,3,1,2)
+    # gmmsd_save_grid(sample)
     return sample
 
+    
 def get_GMMSD(augment, dataroot, download, batch_size):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     image_shape = (32, 32, 3)
     num_classes = 1  # Not real value. TODO : Check if this is relevant. 
     dataset = np.load(dataroot)
-    images_cluster = dataset[:,:1024]
+    images_cluster = dataset[:,:1024] # 1024 is the image, and 1025 is the log likelihood in this data structure (next line)
     ll = dataset[:,-1]
     images = transform_cluster_to_image(images_cluster)
     ind = int(images.shape[0]*0.7)
-    trainX = images[:ind]
-    # trainX = images[:1024]
+    # trainX = images[:ind]
+    trainX = images[:1024]
     # trainY = torch.tensor(ll[:ind], device=device)
     trainY = torch.ones(trainX.shape[0])
     testX = images[ind+1:]
