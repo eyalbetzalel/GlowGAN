@@ -12,40 +12,56 @@ import os
 import numpy as np
 import math
 import sys
-
 import torchvision.transforms as transforms
-from torchvision.utils import save_image
-
-from torch.utils.data import DataLoader
-from torchvision import datasets
-from torch.autograd import Variable
-
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.autograd as autograd
-import torch
+
+from torchvision.utils import save_image
+from torch.utils.data import DataLoader
+from torchvision import datasets
+from torch.autograd import Variable
 from wpgan_model import Discriminator, Generator
 
-# GLOW :
+# REALNVP :
 
-import json
-import shutil
-import random
-from itertools import islice
-
+import argparse
+import torch, torchvision
+import torch.distributions as distributions
 import torch.optim as optim
+import torchvision.utils as utils
 import torch.utils.data as data
+import numpy as np
+import realnvp, data_utils
 
-from ignite.contrib.handlers import ProgressBar
-from ignite.engine import Engine, Events
-from ignite.handlers import ModelCheckpoint, Timer
-from ignite.metrics import RunningAverage, Loss
-from datasets import get_CIFAR10, get_SVHN, get_GMMSD, postprocess
-from glow_model import Glow
+# Dataset : 
+
+from datasets import get_CIFAR10, get_GMMSD, get_SVHN, preprocess, postprocess
+
 
 ################################################################################
 
-# os.makedirs("images", exist_ok=True)
+class Hyperparameters():
+    def __init__(self, base_dim, res_blocks, bottleneck, 
+        skip, weight_norm, coupling_bn, affine):
+        """Instantiates a set of hyperparameters used for constructing layers.
+
+        Args:
+            base_dim: features in residual blocks of first few layers.
+            res_blocks: number of residual blocks to use.
+            bottleneck: True if use bottleneck, False otherwise.
+            skip: True if use skip architecture, False otherwise.
+            weight_norm: True if apply weight normalization, False otherwise.
+            coupling_bn: True if batchnorm coupling layer output, False otherwise.
+            affine: True if use affine coupling, False if use additive coupling.
+        """
+        self.base_dim = base_dim
+        self.res_blocks = res_blocks
+        self.bottleneck = bottleneck
+        self.skip = skip
+        self.weight_norm = weight_norm
+        self.coupling_bn = coupling_bn
+        self.affine = affine
 
 ################################################################################
 
@@ -54,38 +70,22 @@ from glow_model import Glow
 # TODO : Import models Descriminator and Generator . 
 
 def main(
-    # Glow : 
-    dataset,
-    dataroot,
-    download,
-    augment,
-    batch_size,
-    eval_batch_size,
+
+    # realnvp : 
+    base_dim, 
+    res_blocks, 
+    bottleneck, 
+    skip, 
+    weight_norm, 
+    coupling_bn, 
+    affine, 
+    lr, 
+    momentum, 
+    decay,
+    sample_size,
     n_epochs,
-    saved_model,
-    seed,
-    hidden_channels,
-    K,
-    L,
-    actnorm_scale,
-    flow_permutation,
-    flow_coupling,
-    LU_decomposed,
-    learn_top,
-    y_condition,
-    y_weight,
-    max_grad_clip,
-    max_grad_norm,
-    lr,
-    n_workers,
-    cuda,
-    n_init_batches,
-    output_dir,
-    saved_optimizer,
-    warmup,
     
     # WP-GAN:
-
     b1,
     b2,
     n_cpu,
@@ -95,13 +95,43 @@ def main(
     n_critic,
     clip_value,
     sample_interval,
-
+    
+    # Dataset :
+    dataroot,
+    download,
+    augment,
+    dataset, 
+    batch_size,
+    n_workers,
 
 ):
+
     # Main loop:
+    hps = Hyperparameters(
+    base_dim = base_dim, 
+    res_blocks = res_blocks, 
+    bottleneck = bottleneck, 
+    skip = skip, 
+    weight_norm = weight_norm, 
+    coupling_bn = coupling_bn, 
+    affine = affine)
+    
+    scale_reg = 5e-5    # L2 regularization strength
+
+    # prefix for images and checkpoints
+    filename = 'bs%d_' % batch_size \
+             + 'normal_' \
+             + 'bd%d_' % hps.base_dim \
+             + 'rb%d_' % hps.res_blocks \
+             + 'bn%d_' % hps.bottleneck \
+             + 'sk%d_' % hps.skip \
+             + 'wn%d_' % hps.weight_norm \
+             + 'cb%d_' % hps.coupling_bn \
+             + 'af%d' % hps.affine \
     
     ################################################################################
     # Configure data loader
+    
     def check_dataset(dataset, dataroot, augment, download, batch_size):
         if dataset == "cifar10":
             cifar10 = get_CIFAR10(augment, dataroot, download)
@@ -128,7 +158,7 @@ def main(
         )
         test_loader = data.DataLoader(
             test_dataset,
-            batch_size=eval_batch_size,
+            batch_size=batch_size,
             shuffle=False,
             num_workers=n_workers,
             drop_last=False,
@@ -146,52 +176,50 @@ def main(
 
     cuda = True if torch.cuda.is_available() else False
 
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # Loss weight for gradient penalty
     lambda_gp = 10
 
     # Initialize generator and discriminator
-    
-    generator = Glow(
-        image_shape,
-        hidden_channels,
-        K,
-        L,
-        actnorm_scale,
-        flow_permutation,
-        flow_coupling,
-        LU_decomposed,
-        num_classes,
-        learn_top,
-        y_condition,
-    )
-    
-    wandb.config = {"learning_rate": lr, "epochs": n_epochs, "batch_size": 64}
-    discriminator = Discriminator(img_shape)
 
-    if cuda:
-        generator.cuda()
-        discriminator.cuda()
+    prior = distributions.Normal(   # isotropic standard normal distribution
+        torch.tensor(0.).to(device), 
+        torch.tensor(1.).to(device)
+        )
+
+    data_info = data_utils.DataInfo("gmmsd", 3, 32)
+    
+    generator = realnvp.RealNVP(datainfo=data_info, 
+    prior=prior, 
+    hps=hps).to(device)
+
+    wandb.config = {"learning_rate": lr, "epochs": n_epochs, "batch_size": 64}
+    
+    # Switch REALNVP by regular generator : 
+    # generator = Generator(img_shape, latent_dim)
+    
+    discriminator = Discriminator(img_shape).to(device)
 
     # Optimizers:
     
-    optimizer_G = torch.optim.Adam(generator.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2))    
-#    optimizer_G = optim.Adamax(generator.parameters(), lr=5e-4, weight_decay=5e-5)
-#    lr_lambda = lambda epoch: min(1.0, (epoch + 1) / warmup)  # noqa
-#    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer_G, lr_lambda=lr_lambda)
+#    optimizer_G = torch.optim.Adam(generator.parameters(), lr=lr, betas=(opt.b1, opt.b2))    
+    optimizer_G = optim.Adamax(generator.parameters(), lr=lr, betas=(momentum, decay), eps=1e-7)
     
     optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=lr, betas=(opt.b1, opt.b2))
 
     Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 
-    def sample_from_glow(model):
-        # TODO : Check if Glow postprocess function fit WPGAN Generator output(dimensions / normalization etc)
-        model.set_actnorm_init()
+    def sample_from_realnvp(model, batch_size):
+#        # TODO : Check if Glow postprocess function fit WPGAN Generator output(dimensions / normalization etc)
         model = model.eval()
         with torch.no_grad():
-            y = None
-            images = model(y_onehot=y, temperature=1, reverse=True)
-            images = images.permute(0,2,3,1)
-        return images
+            samples = model.sample(batch_size)
+            samples, _ = data_utils.logit_transform(samples, reverse=True)
+            
+            # SAVE IMAGES FROM GENERATOR : 
+            # utils.save_image(utils.make_grid(samples),
+            #     './samples/' + dataset + '/' + filename + '_ep%d.png' % epoch)
+        return samples
          
     def compute_gradient_penalty(D, real_samples, fake_samples):
     
@@ -235,8 +263,15 @@ def main(
             optimizer_D.zero_grad()
                         
             # Generate a batch of images
-            fake_imgs = sample_from_glow(generator)
-            
+            fake_imgs = sample_from_realnvp(generator, batch_size)
+
+            #####################################################################################################################
+            # Sample noise as generator input - WGANGP Generator:
+            # z = Variable(Tensor(np.random.normal(0, 1, (imgs.shape[0], opt.latent_dim))))
+            # Generate a batch of images - WGANGP Generator
+            # fake_imgs = generator(z)
+            #####################################################################################################################
+
             # Real images
             real_validity = discriminator(real_imgs)
             
@@ -248,39 +283,50 @@ def main(
             
             # Adversarial loss
             d_loss = -torch.mean(real_validity) + torch.mean(fake_validity) + lambda_gp * gradient_penalty
-
             d_loss.backward()
             optimizer_D.step()
-
+            
             optimizer_G.zero_grad()
             
             wandb.log({"d_loss": d_loss})
 
-
             # Train the generator every n_critic steps
             if i % n_critic == 0:
+            
+                for k in range(10): 
+                    
+                    # -----------------
+                    #  Train Generator
+                    # -----------------
+    
+                    # Generate a batch of images
+                    
+                    fake_imgs = sample_from_realnvp(generator)
+                    
+                    generator.train()
 
-                # -----------------
-                #  Train Generator
-                # -----------------
-
-                # Generate a batch of images
-                fake_imgs = sample_from_glow(generator)
-                generator.train()
-                # Loss measures generator's ability to fool the discriminator
-                # Train on fake images
-                fake_validity = discriminator(fake_imgs)
-                g_loss = -torch.mean(fake_validity)
-
-                g_loss.backward()
-                optimizer_G.step()
-
-                print(
-                    "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
-                    % (epoch, n_epochs, i, len(train_loader), d_loss.item(), g_loss.item())
-                )
-
-                
+                    # This line is important due to the need for the gradient calculation in the generator for this step! :
+                    z = generator(fake_imgs.permute(0,3,1,2))
+                    
+                    
+                    # Generate a batch of images - WGANGP Generator
+                    # fake_imgs = generator(z)
+                    
+                    # Loss measures generator's ability to fool the discriminator
+                    # Train on fake images
+                    fake_validity = discriminator(fake_imgs)
+                    g_loss = -torch.mean(fake_validity)
+    
+                    g_loss.backward()
+                    
+                    optimizer_G.step()
+    
+                    print(
+                        "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
+                        % (epoch, n_epochs, i, len(train_loader), d_loss.item(), g_loss.item())
+                    )
+    
+                    
                 if batches_done % sample_interval == 0:
                     
                     # Save samples from generator : 
@@ -306,9 +352,9 @@ def main(
                     caption_str = "Epoch : " + str(epoch)
                     images = wandb.Image(grid.cpu().numpy(), caption=caption_str)
                     wandb.log({"GMMSD:": images})
-                    
-                    
-
+                        
+                        
+    
                 batches_done = batches_done + n_critic
                 wandb.log({"g_loss": g_loss})
 
@@ -334,155 +380,68 @@ if __name__ == "__main__":
     parser.add_argument("--clip_value", type=float, default=0.01, help="lower and upper clip value for disc. weights")
     parser.add_argument("--sample_interval", type=int, default=400, help="interval betwen image samples")
 
-    # GLOW : 
-
-    parser.add_argument(
-        "--dataset",
-        type=str,
-        default="gmmsd",
-        choices=["cifar10", "svhn", "gmmsd"],
-        help="Type of the dataset to be used.",
-    )
-
-    parser.add_argument("--dataroot", type=str, default="/home/dsi/eyalbetzalel/GlowGAN/data/gmmsd.npy", help="path to dataset")
-
-    parser.add_argument("--download", action="store_true", help="downloads dataset")
-
-    parser.add_argument(
-        "--no_augment",
-        action="store_false",
-        dest="augment",
-        help="Augment training data",
-    )
-
-    parser.add_argument(
-        "--hidden_channels", type=int, default=256, help="Number of hidden channels - 512"
-    )
-
-    parser.add_argument("--K", type=int, default=8, help="Number of layers per block - 32 ")
-
-    parser.add_argument("--L", type=int, default=3, help="Number of blocks - 3")
-
-    parser.add_argument(
-        "--actnorm_scale", type=float, default=1.0, help="Act norm scale"
-    )
-
-    parser.add_argument(
-        "--flow_permutation",
-        type=str,
-        default="invconv",
-        choices=["invconv", "shuffle", "reverse"],
-        help="Type of flow permutation",
-    )
-
-    parser.add_argument(
-        "--flow_coupling",
-        type=str,
-        default="affine",
-        choices=["additive", "affine"],
-        help="Type of flow coupling",
-    )
-
-    parser.add_argument(
-        "--no_LU_decomposed",
-        action="store_false",
-        dest="LU_decomposed",
-        help="Train with LU decomposed 1x1 convs",
-    )
-
-    parser.add_argument(
-        "--no_learn_top",
-        action="store_false",
-        help="Do not train top layer (prior)",
-        dest="learn_top",
-    )
-
-    parser.add_argument(
-        "--y_condition", action="store_true", help="Train using class condition"
-    )
-
-    parser.add_argument(
-        "--y_weight", type=float, default=0.01, help="Weight for class condition loss"
-    )
-
-    parser.add_argument(
-        "--max_grad_clip",
-        type=float,
-        default=0,
-        help="Max gradient value (clip above - for off)",
-    )
-
-    parser.add_argument(
-        "--max_grad_norm",
-        type=float,
-        default=0,
-        help="Max norm of gradient (clip above - 0 for off)",
-    )
-
-    parser.add_argument(
-        "--n_workers", type=int, default=1, help="number of data loading workers"
-    )
-
-    # parser.add_argument(
-    #     "--batch_size", type=int, default=64, help="batch size used during training"
-    # )
-
-    parser.add_argument(
-        "--eval_batch_size",
-        type=int,
-        default=512,
-        help="batch size used during evaluation",
-    )
-
-    # parser.add_argument(
-    #     "--epochs", type=int, default=250, help="number of epochs to train for"
-    # )
-
-    # parser.add_argument("--lr", type=float, default=5e-4, help="Learning rate")
-
-    parser.add_argument(
-        "--warmup",
-        type=float,
-        default=5,
-        help="Use this number of epochs to warmup learning rate linearly from zero to learning rate",  # noqa
-    )
-
-    parser.add_argument(
-        "--n_init_batches",
-        type=int,
-        default=8,
-        help="Number of batches to use for Act Norm initialisation",
-    )
-
-    parser.add_argument(
-        "--no_cuda", action="store_false", dest="cuda", help="Disables cuda"
-    )
-
-    parser.add_argument(
-        "--output_dir",
-        default="output/",
-        help="Directory to output logs and model checkpoints",
-    )
-
-    parser.add_argument(
-        "--fresh", action="store_true", help="Remove output directory before starting"
-    )
-
-    parser.add_argument(
-        "--saved_model",
-        default="",
-        help="Path to model to load for continuing training",
-    )
-
-    parser.add_argument(
-        "--saved_optimizer",
-        default="",
-        help="Path to optimizer to load for continuing training",
-    )
+    # REAL - NVP :
+     
+    parser.add_argument('--dataset',
+                        help='dataset to be modeled.',
+                        type=str,
+                        default='cifar10')
+    parser.add_argument('--batch_size',
+                        help='number of images in a mini-batch.',
+                        type=int,
+                        default=64)
+    parser.add_argument('--base_dim',
+                        help='features in residual blocks of first few layers.',
+                        type=int,
+                        default=64)
+    parser.add_argument('--res_blocks',
+                        help='number of residual blocks per group.',
+                        type=int,
+                        default=8)
+    parser.add_argument('--bottleneck',
+                        help='whether to use bottleneck in residual blocks.',
+                        type=int,
+                        default=0)
+    parser.add_argument('--skip',
+                        help='whether to use skip connection in coupling layers.',
+                        type=int,
+                        default=1)
+    parser.add_argument('--weight_norm',
+                        help='whether to apply weight normalization.',
+                        type=int,
+                        default=1)
+    parser.add_argument('--coupling_bn',
+                        help='whether to apply batchnorm after coupling layers.',
+                        type=int,
+                        default=1)
+    parser.add_argument('--affine',
+                        help='whether to use affine coupling.',
+                        type=int,
+                        default=1)
+    parser.add_argument('--max_epoch',
+                        help='maximum number of training epoches.',
+                        type=int,
+                        default=500)
+    parser.add_argument('--sample_size',
+                        help='number of images to generate.',
+                        type=int,
+                        default=64)
+    parser.add_argument('--lr',
+                        help='initial learning rate.',
+                        type=float,
+                        default=1e-3)
+    parser.add_argument('--momentum',
+                        help='beta1 in Adam optimizer.',
+                        type=float,
+                        default=0.9)
+    parser.add_argument('--decay',
+                        help='beta2 in Adam optimizer.',
+                        type=float,
+                        default=0.999)
 
     wandb.init(project="GlowGAN", entity="eyalb")
 
-    parser.add_argument("--seed", type=int, default=0, help="manual seed")
+    
 
     opt = parser.parse_args()
 
