@@ -755,7 +755,7 @@ class RealNVP(nn.Module):
         """
         x, x_off_1 = self.factor_out(z, self.order_matrix_1)
 
-        if self.datainfo.name in ['imnet32', 'imnet64', 'celeba']:
+        if self.datainfo.name in ['imnet32', 'imnet64', 'celeba','gmmsd']:
             x, x_off_2 = self.factor_out(x, self.order_matrix_2)
             x, x_off_3 = self.factor_out(x, self.order_matrix_3)
 
@@ -841,7 +841,7 @@ class RealNVP(nn.Module):
             z, inc = self.s2_ckbd[i](z)
             log_diag_J = log_diag_J + inc
 
-        if self.datainfo.name in ['imnet32', 'imnet64', 'celeba']:
+        if self.datainfo.name in ['imnet32', 'imnet64', 'celeba', 'gmmsd']:
             z, log_diag_J = self.squeeze(z), self.squeeze(log_diag_J)
             for i in range(len(self.s2_chan)):
                 z, inc = self.s2_chan[i](z)

@@ -215,7 +215,8 @@ def main(
         with torch.no_grad():
             samples = model.sample(batch_size)
             samples, _ = data_utils.logit_transform(samples, reverse=True)
-            
+            samples = samples.permute(0,2,3,1)
+        
             # SAVE IMAGES FROM GENERATOR : 
             # utils.save_image(utils.make_grid(samples),
             #     './samples/' + dataset + '/' + filename + '_ep%d.png' % epoch)
@@ -282,6 +283,7 @@ def main(
             gradient_penalty = compute_gradient_penalty(discriminator, real_imgs.data, fake_imgs.data)
             
             # Adversarial loss
+            
             d_loss = -torch.mean(real_validity) + torch.mean(fake_validity) + lambda_gp * gradient_penalty
             d_loss.backward()
             optimizer_D.step()
@@ -293,7 +295,7 @@ def main(
             # Train the generator every n_critic steps
             if i % n_critic == 0:
             
-                for k in range(10): 
+                for k in range(1): 
                     
                     # -----------------
                     #  Train Generator
@@ -301,11 +303,14 @@ def main(
     
                     # Generate a batch of images
                     
-                    fake_imgs = sample_from_realnvp(generator)
+                    
+                    
+                    fake_imgs = sample_from_realnvp(generator, batch_size)
                     
                     generator.train()
 
                     # This line is important due to the need for the gradient calculation in the generator for this step! :
+                    
                     z = generator(fake_imgs.permute(0,3,1,2))
                     
                     
@@ -330,12 +335,11 @@ def main(
                 if batches_done % sample_interval == 0:
                     
                     # Save samples from generator : 
-                    
                     fake_imgs = postprocess(fake_imgs).permute(0,3,1,2)
                     grid = make_grid(fake_imgs[:30], nrow=6).permute(1,2,0)
                     
                     plt.figure(figsize=(10,10))
-                    plt.imsave("./images/sample_glow_batch_%d.png" % batches_done, grid.cpu().numpy())
+                    plt.imsave("./images2/sample_glow_batch_%d.png" % batches_done, grid.cpu().numpy())
 
                     caption_str = "Epoch : " + str(epoch)
                     images = wandb.Image(grid.cpu().numpy(), caption=caption_str)
@@ -347,7 +351,7 @@ def main(
                     grid = make_grid(real_imgs[:30], nrow=6).permute(1,2,0)
                     
                     plt.figure(figsize=(10,10))
-                    plt.imsave("./images/gmmsd_example_batch_%d.png" % batches_done, grid.cpu().numpy())
+                    plt.imsave("./images2/gmmsd_example_batch_%d.png" % batches_done, grid.cpu().numpy())
                 
                     caption_str = "Epoch : " + str(epoch)
                     images = wandb.Image(grid.cpu().numpy(), caption=caption_str)
@@ -368,7 +372,6 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--n_epochs", type=int, default=2000, help="number of epochs of training")
-    parser.add_argument("--batch_size", type=int, default=64, help="size of the batches")
     parser.add_argument("--lr", type=float, default=0.0001, help="adam: learning rate")
     parser.add_argument("--b1", type=float, default=0.5, help="adam: decay of first order momentum of gradient")
     parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
@@ -376,20 +379,16 @@ if __name__ == "__main__":
     parser.add_argument("--latent_dim", type=int, default=100, help="dimensionality of the latent space")
     parser.add_argument("--img_size", type=int, default=32, help="size of each image dimension")
     parser.add_argument("--channels", type=int, default=3, help="number of image channels")
-    parser.add_argument("--n_critic", type=int, default=5, help="number of training steps for discriminator per iter")
+    parser.add_argument("--n_critic", type=int, default=1, help="number of training steps for discriminator per iter")
     parser.add_argument("--clip_value", type=float, default=0.01, help="lower and upper clip value for disc. weights")
     parser.add_argument("--sample_interval", type=int, default=400, help="interval betwen image samples")
 
     # REAL - NVP :
      
-    parser.add_argument('--dataset',
-                        help='dataset to be modeled.',
-                        type=str,
-                        default='cifar10')
     parser.add_argument('--batch_size',
                         help='number of images in a mini-batch.',
                         type=int,
-                        default=64)
+                        default=32)
     parser.add_argument('--base_dim',
                         help='features in residual blocks of first few layers.',
                         type=int,
@@ -418,18 +417,10 @@ if __name__ == "__main__":
                         help='whether to use affine coupling.',
                         type=int,
                         default=1)
-    parser.add_argument('--max_epoch',
-                        help='maximum number of training epoches.',
-                        type=int,
-                        default=500)
     parser.add_argument('--sample_size',
                         help='number of images to generate.',
                         type=int,
                         default=64)
-    parser.add_argument('--lr',
-                        help='initial learning rate.',
-                        type=float,
-                        default=1e-3)
     parser.add_argument('--momentum',
                         help='beta1 in Adam optimizer.',
                         type=float,
@@ -438,6 +429,23 @@ if __name__ == "__main__":
                         help='beta2 in Adam optimizer.',
                         type=float,
                         default=0.999)
+                        
+    parser.add_argument("--dataset",
+                        type=str,
+                        default="gmmsd",
+                        choices=["cifar10", "svhn", "gmmsd"],
+                        help="Type of the dataset to be used.",)
+
+    parser.add_argument("--dataroot", type=str, default="/home/dsi/eyalbetzalel/GlowGAN/data/gmmsd.npy", help="path to dataset")
+
+    parser.add_argument("--download", action="store_true", help="downloads dataset")
+
+    parser.add_argument("--no_augment",
+                        action="store_false",
+                        dest="augment",
+                        help="Augment training data",)
+                        
+    parser.add_argument("--n_workers", type=int, default=1, help="number of data loading workers")
 
     wandb.init(project="GlowGAN", entity="eyalb")
 
@@ -446,7 +454,6 @@ if __name__ == "__main__":
     opt = parser.parse_args()
 
     kwargs = vars(opt)
-    del kwargs["fresh"]
 
     # with open(os.path.join(args.output_dir, "hparams.json"), "w") as fp:
     #     json.dump(kwargs, fp, sort_keys=True, indent=4)
