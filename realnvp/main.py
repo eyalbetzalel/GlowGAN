@@ -299,7 +299,6 @@ def main(
             
                 for k in range(1): 
                     
-                    v=0  
                     # -----------------
                     #  Train Generator
                     # -----------------
