@@ -36,7 +36,7 @@ import realnvp, data_utils
 
 # Dataset : 
 
-from datasets import get_CIFAR10, get_GMMSD, get_SVHN, preprocess, postprocess
+from datasets import get_CIFAR10, get_GMMSD, get_SVHN, preprocess, postprocess, postprocess_fake
 
 
 ################################################################################
@@ -211,12 +211,13 @@ def main(
 
     def sample_from_realnvp(model, batch_size):
 #        # TODO : Check if Glow postprocess function fit WPGAN Generator output(dimensions / normalization etc)
-        model = model.eval()
-        with torch.no_grad():
-            samples = model.sample(batch_size)
-            samples, _ = data_utils.logit_transform(samples, reverse=True)
-            samples = samples.permute(0,2,3,1)
-        
+        # model = model.eval()
+        # with torch.no_grad():
+        model.train()
+        samples = model.sample(batch_size)
+        samples, _ = data_utils.logit_transform(samples, reverse=True)
+        samples = samples.permute(0,2,3,1)
+
             # SAVE IMAGES FROM GENERATOR : 
             # utils.save_image(utils.make_grid(samples),
             #     './samples/' + dataset + '/' + filename + '_ep%d.png' % epoch)
@@ -253,10 +254,11 @@ def main(
     batches_done = 0
     for epoch in range(opt.n_epochs):
         for i, (imgs, _) in enumerate(train_loader):
-
+            
+            
             # Configure input
             real_imgs = Variable(imgs.type(Tensor))
-
+            real_imgs = 0.555 * real_imgs + 0.5
             # ---------------------
             #  Train Discriminator
             # ---------------------
@@ -272,7 +274,7 @@ def main(
             # Generate a batch of images - WGANGP Generator
             # fake_imgs = generator(z)
             #####################################################################################################################
-
+            
             # Real images
             real_validity = discriminator(real_imgs)
             
@@ -303,15 +305,13 @@ def main(
     
                     # Generate a batch of images
                     
-                    
-                    
                     fake_imgs = sample_from_realnvp(generator, batch_size)
                     
                     generator.train()
 
                     # This line is important due to the need for the gradient calculation in the generator for this step! :
                     
-                    z = generator(fake_imgs.permute(0,3,1,2))
+                    # z = generator(fake_imgs.permute(0,3,1,2))
                     
                     
                     # Generate a batch of images - WGANGP Generator
@@ -335,11 +335,11 @@ def main(
                 if batches_done % sample_interval == 0:
                     
                     # Save samples from generator : 
-                    fake_imgs = postprocess(fake_imgs).permute(0,3,1,2)
+                    fake_imgs = postprocess_fake(fake_imgs).permute(0,3,1,2)
                     grid = make_grid(fake_imgs[:30], nrow=6).permute(1,2,0)
                     
                     plt.figure(figsize=(10,10))
-                    plt.imsave("./images2/sample_glow_batch_%d.png" % batches_done, grid.cpu().numpy())
+                    plt.imsave("./images3/sample_glow_batch_%d.png" % batches_done, grid.cpu().numpy())
 
                     caption_str = "Epoch : " + str(epoch)
                     images = wandb.Image(grid.cpu().numpy(), caption=caption_str)
@@ -347,15 +347,37 @@ def main(
                     
                     # Save training batch as refernce : 
                     
-                    real_imgs = postprocess(real_imgs).permute(0,3,1,2)
+                    real_imgs = postprocess_fake(real_imgs).permute(0,3,1,2)
                     grid = make_grid(real_imgs[:30], nrow=6).permute(1,2,0)
                     
                     plt.figure(figsize=(10,10))
-                    plt.imsave("./images2/gmmsd_example_batch_%d.png" % batches_done, grid.cpu().numpy())
+                    plt.imsave("./images3/gmmsd_example_batch_%d.png" % batches_done, grid.cpu().numpy())
                 
                     caption_str = "Epoch : " + str(epoch)
                     images = wandb.Image(grid.cpu().numpy(), caption=caption_str)
                     wandb.log({"GMMSD:": images})
+                    
+                    EPOCH = epoch
+                    PATH = "generator.pt"
+                    LOSS = g_loss.item()
+                    
+                    torch.save({
+                                'epoch': EPOCH,
+                                'model_state_dict': generator.state_dict(),
+                                'optimizer_state_dict': optimizer_G.state_dict(),
+                                'loss': LOSS,
+                                }, PATH)
+                                
+                    EPOCH = epoch
+                    PATH = "discriminator.pt"
+                    LOSS = g_loss.item()
+                    
+                    torch.save({
+                                'epoch': EPOCH,
+                                'model_state_dict': discriminator.state_dict(),
+                                'optimizer_state_dict': optimizer_D.state_dict(),
+                                'loss': LOSS,
+                                }, PATH)
                         
                         
     
@@ -371,17 +393,17 @@ if __name__ == "__main__":
     # WP-GAN : 
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--n_epochs", type=int, default=2000, help="number of epochs of training")
-    parser.add_argument("--lr", type=float, default=0.0001, help="adam: learning rate")
+    parser.add_argument("--n_epochs", type=int, default=20000, help="number of epochs of training")
+    parser.add_argument("--lr", type=float, default=0.001, help="adam: learning rate")
     parser.add_argument("--b1", type=float, default=0.5, help="adam: decay of first order momentum of gradient")
     parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
     parser.add_argument("--n_cpu", type=int, default=8, help="number of cpu threads to use during batch generation")
     parser.add_argument("--latent_dim", type=int, default=100, help="dimensionality of the latent space")
     parser.add_argument("--img_size", type=int, default=32, help="size of each image dimension")
     parser.add_argument("--channels", type=int, default=3, help="number of image channels")
-    parser.add_argument("--n_critic", type=int, default=1, help="number of training steps for discriminator per iter")
+    parser.add_argument("--n_critic", type=int, default=5, help="number of training steps for discriminator per iter")
     parser.add_argument("--clip_value", type=float, default=0.01, help="lower and upper clip value for disc. weights")
-    parser.add_argument("--sample_interval", type=int, default=400, help="interval betwen image samples")
+    parser.add_argument("--sample_interval", type=int, default=500, help="interval betwen image samples")
 
     # REAL - NVP :
      
@@ -392,7 +414,7 @@ if __name__ == "__main__":
     parser.add_argument('--base_dim',
                         help='features in residual blocks of first few layers.',
                         type=int,
-                        default=64)
+                        default=32)
     parser.add_argument('--res_blocks',
                         help='number of residual blocks per group.',
                         type=int,

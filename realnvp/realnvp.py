@@ -250,7 +250,7 @@ class CheckerboardAdditiveCoupling(AbstractCoupling):
         Returns:
             transformed tensor and log of diagonal elements of Jacobian.
         """
-        [B, _, _, _] = list(x,size())
+        [B, _, _, _] = list(x.size())
         mask = self.mask.repeat(B, 1, 1, 1)
         x_ = self.in_bn(x * mask)
         x_ = torch.cat((x_, -x_), dim=1)
