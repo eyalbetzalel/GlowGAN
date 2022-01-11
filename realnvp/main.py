@@ -299,6 +299,7 @@ def main(
             
                 for k in range(1): 
                     
+                    v=0  
                     # -----------------
                     #  Train Generator
                     # -----------------
@@ -319,6 +320,7 @@ def main(
                     
                     # Loss measures generator's ability to fool the discriminator
                     # Train on fake images
+
                     fake_validity = discriminator(fake_imgs)
                     g_loss = -torch.mean(fake_validity)
     
