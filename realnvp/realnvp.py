@@ -250,7 +250,7 @@ class CheckerboardAdditiveCoupling(AbstractCoupling):
         Returns:
             transformed tensor and log of diagonal elements of Jacobian.
         """
-        [B, _, _, _] = list(x.size())
+        [B, _, _, _] = list(x,size())
         mask = self.mask.repeat(B, 1, 1, 1)
         x_ = self.in_bn(x * mask)
         x_ = torch.cat((x_, -x_), dim=1)
@@ -595,11 +595,6 @@ class RealNVP(nn.Module):
             if datainfo.name == 'imnet32':
                 # SCALE 4: 24 x 4 x 4
                 self.s4_ckbd = self.checkerboard_combo(chan, dim, size, hps, final=True)
-
-            
-            if datainfo.name == 'gmmsd':
-                # SCALE 4: 24 x 4 x 4
-                self.s4_ckbd = self.checkerboard_combo(chan, dim, size, hps, final=True)
             
             elif datainfo.name in ['imnet64', 'celeba']:
                 # SCALE 4: 24 x 8 x 8
@@ -755,7 +750,7 @@ class RealNVP(nn.Module):
         """
         x, x_off_1 = self.factor_out(z, self.order_matrix_1)
 
-        if self.datainfo.name in ['imnet32', 'imnet64', 'celeba','gmmsd']:
+        if self.datainfo.name in ['imnet32', 'imnet64', 'celeba']:
             x, x_off_2 = self.factor_out(x, self.order_matrix_2)
             x, x_off_3 = self.factor_out(x, self.order_matrix_3)
 
@@ -841,7 +836,7 @@ class RealNVP(nn.Module):
             z, inc = self.s2_ckbd[i](z)
             log_diag_J = log_diag_J + inc
 
-        if self.datainfo.name in ['imnet32', 'imnet64', 'celeba', 'gmmsd']:
+        if self.datainfo.name in ['imnet32', 'imnet64', 'celeba']:
             z, log_diag_J = self.squeeze(z), self.squeeze(log_diag_J)
             for i in range(len(self.s2_chan)):
                 z, inc = self.s2_chan[i](z)
