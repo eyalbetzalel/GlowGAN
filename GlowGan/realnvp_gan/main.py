@@ -198,8 +198,8 @@ def main(
     discriminator = Discriminator(img_shape).to(device)
 
     # Loss function : 
-    adversarial_loss = torch.nn.BCELoss().to(device)
-    
+    adversarial_loss = torch.nn.BCELoss()
+    # adversarial_loss = adversarial_loss.to(device)
     # Optimizers:
     optimizer_G = optim.Adamax(generator.parameters(), lr=lr, betas=(momentum, decay), eps=1e-7)
     optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=lr, betas=(opt.b1, opt.b2))
@@ -228,11 +228,12 @@ def main(
             optimizer_G.zero_grad()
             
             # Generate a batch of images
-            fake_imgs = sample_from_realnvp(generator, batch_size)
+            fake_imgs = sample_from_realnvp(generator, imgs.size(0))
             
             # Loss measures generator's ability to fool the discriminator
+            
             g_loss = adversarial_loss(discriminator(fake_imgs), valid)
-
+            
             g_loss.backward()
             optimizer_G.step()
 
@@ -263,6 +264,11 @@ def main(
            
             wandb.log({"d_loss": d_loss})
             wandb.log({"g_loss": g_loss})
+            
+            print(
+                "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
+                % (epoch, n_epochs, i, len(train_loader), d_loss.item(), g_loss.item())
+                )
 
     
                     
@@ -272,9 +278,10 @@ def main(
                 fake_imgs = postprocess_fake(fake_imgs).permute(0,3,1,2)
                 grid = make_grid(fake_imgs[:30], nrow=6).permute(1,2,0)
                 
-                plt.figure(figsize=(10,10))
+                f = plt.figure(figsize=(10,10))
                 plt.imsave("./images3/sample_glow_batch_%d.png" % batches_done, grid.cpu().numpy())
-
+                plt.close(f)
+                
                 caption_str = "Epoch : " + str(epoch)
                 images = wandb.Image(grid.cpu().numpy(), caption=caption_str)
                 wandb.log({"Generator:": images})
@@ -284,9 +291,10 @@ def main(
                 real_imgs = postprocess_fake(real_imgs).permute(0,3,1,2)
                 grid = make_grid(real_imgs[:30], nrow=6).permute(1,2,0)
                 
-                plt.figure(figsize=(10,10))
+                f = plt.figure(figsize=(10,10))
                 plt.imsave("./images3/gmmsd_example_batch_%d.png" % batches_done, grid.cpu().numpy())
-            
+                plt.close(f)
+                
                 caption_str = "Epoch : " + str(epoch)
                 images = wandb.Image(grid.cpu().numpy(), caption=caption_str)
                 wandb.log({"GMMSD:": images})
@@ -328,16 +336,16 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--n_epochs", type=int, default=20000, help="number of epochs of training")
-    parser.add_argument("--lr", type=float, default=0.001, help="adam: learning rate")
+    parser.add_argument("--lr", type=float, default=0.0002, help="adam: learning rate")
     parser.add_argument("--b1", type=float, default=0.5, help="adam: decay of first order momentum of gradient")
     parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
     parser.add_argument("--n_cpu", type=int, default=8, help="number of cpu threads to use during batch generation")
     parser.add_argument("--latent_dim", type=int, default=100, help="dimensionality of the latent space")
     parser.add_argument("--img_size", type=int, default=32, help="size of each image dimension")
     parser.add_argument("--channels", type=int, default=3, help="number of image channels")
-    parser.add_argument("--n_critic", type=int, default=5, help="number of training steps for discriminator per iter")
+    parser.add_argument("--n_critic", type=int, default=1, help="number of training steps for discriminator per iter")
     parser.add_argument("--clip_value", type=float, default=0.01, help="lower and upper clip value for disc. weights")
-    parser.add_argument("--sample_interval", type=int, default=500, help="interval betwen image samples")
+    parser.add_argument("--sample_interval", type=int, default=1000, help="interval betwen image samples")
 
     # REAL - NVP :
      

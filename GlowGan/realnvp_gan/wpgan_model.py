@@ -29,6 +29,7 @@ class Generator(nn.Module):
         return img
 
 
+        
 class Discriminator(nn.Module):
     def __init__(self, img_shape):
         super(Discriminator, self).__init__()
@@ -39,6 +40,7 @@ class Discriminator(nn.Module):
             nn.Linear(512, 256),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Linear(256, 1),
+            nn.Sigmoid(),
         )
 
     def forward(self, img):
