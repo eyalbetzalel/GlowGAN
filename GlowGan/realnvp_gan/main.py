@@ -38,6 +38,10 @@ import realnvp, data_utils
 
 from datasets import get_CIFAR10, get_GMMSD, get_SVHN, preprocess, postprocess, postprocess_fake
 
+# ImageGPT : 
+
+from imagegpt.imagegpt import ImageGPT
+from gmpm import *
 
 ################################################################################
 
@@ -85,7 +89,7 @@ def main(
     sample_size,
     n_epochs,
     
-    # WP-GAN:
+    # GAN:
     b1,
     b2,
     n_cpu,
@@ -103,6 +107,12 @@ def main(
     dataset, 
     batch_size,
     n_workers,
+
+    # ImageGPT:
+    n_gpu,
+    tf_device,
+    imagegpt_artifact,
+    
 
 ):
 
@@ -169,8 +179,18 @@ def main(
         test_loader = test_dataset
         train_loader = train_dataset   
 
-    ################################################################################
+    
     # Train : 
+
+    
+    # Create ImageGPT Model : 
+    artifacts_path = imagegpt_artifact
+    image_gpt = ImageGPT(
+        batch_size= batch_size,
+        devices= tf_device,
+        ckpt_path=(artifacts_path / "model.ckpt-1000000").as_posix(),
+        color_cluster_path=(artifacts_path / "kmeans_centers.npy").as_posix(),
+    )
 
     def sample_from_realnvp(model, batch_size):
         model.train()
@@ -190,9 +210,11 @@ def main(
     wandb.config = {"learning_rate": lr, "epochs": n_epochs, "batch_size": 64}
 
     # Initialize generator and discriminator:
-    generator = realnvp.RealNVP(datainfo=data_info, 
-    prior=prior, 
-    hps=hps).to(device)
+    generator = realnvp.RealNVP(
+        datainfo=data_info, 
+        prior=prior, 
+        hps=hps
+        ).to(device)
     
     # Switch REALNVP by regular generator :     
     discriminator = Discriminator(img_shape).to(device)
@@ -251,16 +273,6 @@ def main(
 
             d_loss.backward()
             optimizer_D.step()
-
-            # print(
-            #     "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
-            #     % (epoch, opt.n_epochs, i, len(dataloader), d_loss.item(), g_loss.item())
-            # )
-            # batches_done = epoch * len(dataloader) + i
-            # if batches_done % opt.sample_interval == 0:
-            #     # TODO : Sampling procedure. 
-            #     v=0
-
            
             wandb.log({"d_loss": d_loss})
             wandb.log({"g_loss": g_loss})
@@ -269,10 +281,13 @@ def main(
                 "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
                 % (epoch, n_epochs, i, len(train_loader), d_loss.item(), g_loss.item())
                 )
-
-    
                     
             if batches_done % sample_interval == 0:
+
+                # ---------------------
+                #  Sampling
+                # ---------------------
+
                 
                 # Save samples from generator : 
                 fake_imgs = postprocess_fake(fake_imgs).permute(0,3,1,2)
@@ -320,12 +335,21 @@ def main(
                             'optimizer_state_dict': optimizer_D.state_dict(),
                             'loss': LOSS,
                             }, PATH)
-                    
-                    
-
             batches_done = batches_done + n_critic
-
-
+        
+        if epoch % 10 == 0:
+            
+            samples, p = sample_images_from_generator(generator, n_samples=5000)
+            samples_postproc = postprocess_fake(samples, save_image_flag = False)
+            q = run_imagegpt_on_sampled_images(samples_postproc, image_gpt, batch_size)
+            inception_score_res = measure_inception_score_on_sampled_images(samples_postproc)
+            samples_postproc = postprocess_fake(samples, save_image_flag = True)
+            path = save_sampled_images_to_path(images, path="./samples_temp")
+            fid_res = measure_fid_on_sampled_images(path_test_dst = "./temp_folder", path_source_orig= "./source_folder", gpu_num="0")
+            delete_sampled_images_from_path(path)
+            fdiv_res = measure_fdiv_on_sampled_images(p,q)
+            save_all_results_to_file(fdiv_res, inception_score, fid, epoch, path="./")
+            
 ################################################################################
 
 # Arguments : 
@@ -411,9 +435,13 @@ if __name__ == "__main__":
                         
     parser.add_argument("--n_workers", type=int, default=1, help="number of data loading workers")
 
-    wandb.init(project="GlowGAN", entity="eyalb")
-
+    # ImageGPT 
     
+    parser.add_argument('--n_gpu', default=1, type=int)
+    parser.add_argument("--tf_device", nargs="+", type=int, default=[0], help="GPU devices for tf")
+    parser.add_argument('--imagegpt_artifact', default='./image-gpt/artifacts')
+    
+    wandb.init(project="GlowGAN", entity="eyalb")
 
     opt = parser.parse_args()
 
