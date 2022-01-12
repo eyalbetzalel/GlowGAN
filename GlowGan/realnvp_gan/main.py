@@ -182,16 +182,6 @@ def main(
     
     # Train : 
 
-    
-    # Create ImageGPT Model : 
-    artifacts_path = imagegpt_artifact
-    image_gpt = ImageGPT(
-        batch_size= batch_size,
-        devices= tf_device,
-        ckpt_path=(artifacts_path / "model.ckpt-1000000").as_posix(),
-        color_cluster_path=(artifacts_path / "kmeans_centers.npy").as_posix(),
-    )
-
     def sample_from_realnvp(model, batch_size):
         model.train()
         samples = model.sample(batch_size)
@@ -337,18 +327,28 @@ def main(
                             }, PATH)
             batches_done = batches_done + n_critic
         
-        if epoch % 10 == 0:
-            
-            samples, p = sample_images_from_generator(generator, n_samples=5000)
-            samples_postproc = postprocess_fake(samples, save_image_flag = False)
-            q = run_imagegpt_on_sampled_images(samples_postproc, image_gpt, batch_size)
-            inception_score_res = measure_inception_score_on_sampled_images(samples_postproc)
-            samples_postproc = postprocess_fake(samples, save_image_flag = True)
-            path = save_sampled_images_to_path(images, path="./samples_temp")
-            fid_res = measure_fid_on_sampled_images(path_test_dst = "./temp_folder", path_source_orig= "./source_folder", gpu_num="0")
-            delete_sampled_images_from_path(path)
-            fdiv_res = measure_fdiv_on_sampled_images(p,q)
-            save_all_results_to_file(fdiv_res, inception_score, fid, epoch, path="./")
+            # if epoch % 1 == 0:
+            if 0 == 0:
+                        
+                    # Create ImageGPT Model : 
+                artifacts_path = imagegpt_artifact
+                image_gpt = ImageGPT(
+                    batch_size= batch_size,
+                    devices= tf_device,
+                    ckpt_path='/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/imagegpt/artifacts/model.ckpt-1000000/model.ckpt-1000000',
+                    color_cluster_path='/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/imagegpt/artifacts/kmeans_centers.npy',
+                    )
+                samples, p = sample_images_from_generator(generator, n_samples=64)
+                samples_postproc = postprocess_fake2(samples, save_image_flag = False)
+                q = run_imagegpt_on_sampled_images(samples_postproc, image_gpt, batch_size)
+                # inception_score_res = measure_inception_score_on_sampled_images(samples_postproc) # Low GPU resources. 
+                samples_postproc = postprocess_fake2(samples, save_image_flag = True)
+                path = save_sampled_images_to_path(samples_postproc, path="/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/samples_temp")
+                import ipdb; ipdb.set_trace()
+                fid_res = measure_fid_on_sampled_images(path_test_dst = path, gpu_num="0")
+                delete_sampled_images_from_path(path)
+                fdiv_res = measure_fdiv_on_sampled_images(p,q)
+                save_all_results_to_file(fdiv_res, inception_score, fid, epoch, path="./")
             
 ################################################################################
 
@@ -438,8 +438,8 @@ if __name__ == "__main__":
     # ImageGPT 
     
     parser.add_argument('--n_gpu', default=1, type=int)
-    parser.add_argument("--tf_device", nargs="+", type=int, default=[0], help="GPU devices for tf")
-    parser.add_argument('--imagegpt_artifact', default='./image-gpt/artifacts')
+    parser.add_argument("--tf_device", nargs="+", type=int, default=[1, 3], help="GPU devices for tf")
+    parser.add_argument('--imagegpt_artifact', default='/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/imagegpt/artifacts/')
     
     wandb.init(project="GlowGAN", entity="eyalb")
 

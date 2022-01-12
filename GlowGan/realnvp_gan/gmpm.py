@@ -12,15 +12,22 @@ from fdiv import *
 
 def sample_images_from_generator(model, n_samples):
     print("--- Start : sample 5K images ---")
+    samples_all = torch.empty(0, 3, 32, 32).cpu()
+    log_prob_all = torch.empty(0).cpu()
+    count = 0
     model.eval()
     with torch.no_grad():
-        samples = model.sample(n_samples)
-        samples, _ = data_utils.logit_transform(samples, reverse=True)
-        samples = samples.permute(0,2,3,1)
-        log_prob = model.log_prob(samples)
+        while count < n_samples:
+          samples = model.sample(32)
+          samples, _ = data_utils.logit_transform(samples, reverse=True)
+          log_prob = model.log_prob(samples)
+          samples_all = torch.cat((samples_all,samples.detach().cpu()), dim=0)
+          log_prob_all = torch.cat((log_prob_all, log_prob.detach().cpu()), dim=0)
+          count += 50
     print("--- Finish : sample 5K images ---")
-    p = torch.exp(log_prob)
-    return samples, p
+    p = torch.exp(log_prob_all)
+    samples_all = samples_all.permute(0,2,3,1)
+    return samples_all, p
 
 # Files handeling:
 
@@ -36,6 +43,10 @@ def save_sampled_images_to_path(images, path="./samples_temp"):
         img = images[0]
         fname = "img_" + str(i) + ".png"
         img_path_str = os.path.join(path,fname)
+        # save_image get numbers in [0,1] [C,H,W]:
+        img = img.permute(2,0,1)
+        img = img.float() 
+        img /= 255
         save_image(img, img_path_str)
     
     return path
@@ -46,7 +57,7 @@ def delete_sampled_images_from_path(path):
 
 # measure q (likelihood) on this images by ImageGPT
 
-def postprocess_fake(x, save_image_flag = False):
+def postprocess_fake2(x, save_image_flag = False):
     
     # function :postprocess_fake : 
     # Input are samples in tensor format from realnvp [-0.05,1.05]
@@ -70,21 +81,23 @@ def run_imagegpt_on_sampled_images(images, imagegpt_class, batch_size):
     dataset = torch.utils.data.TensorDataset(images)
     data_loader = torch.utils.data.DataLoader(dataset, batch_size = batch_size)
     nll = []
-    for i, (imgs, _) in enumerate(data_loader):
-        sampled_images_numpy = imgs.permute(0, 2, 3, 1).detach().cpu().numpy()
+    for i, imgs in enumerate(data_loader):
+        imgs = imgs[0]
+        sampled_images_numpy = imgs.detach().cpu().numpy()
         # NOTE: expect channels last
         # clusters are in (-1, 1)
-        sampled_images_numpy = postprocess_fake(sampled_images_numpy)
         clustered_sampled_images = imagegpt_class.color_quantize(sampled_images_numpy)
         data_nll = imagegpt_class.eval_model(clustered_sampled_images)
+        data_nll = [j for i in data_nll for j in i] # flatten list
         nll.append(data_nll)
-    # TODO stack results
-    # TODO from nll to probability  
-    return q
+    nll = [i for i in data_nll] # flatten list
+    nll_np = np.asarray(nll)
+    q_res = np.exp(-1.0 * nll_np)
+    return q_res
 
 # measure FID
 
-def measure_fid_on_sampled_images(path_test_dst = "./temp_folder", path_source_orig= "./source_folder", gpu_num="0"):
+def measure_fid_on_sampled_images(path_test_dst = "./temp_folder", path_source_orig= "/home/dsi/eyalbetzalel/image-gpt/save", gpu_num="0"):
     
     # TODO : Add dest folder
     # TODO : Install fid-pytorch on local env
@@ -111,10 +124,9 @@ def measure_fid_on_sampled_images(path_test_dst = "./temp_folder", path_source_o
 # measure IS
 
 def measure_inception_score_on_sampled_images(images):
-    # TODO : In the original code dataset is created from torchvision not from torch.utils.dataset
-    # check if this is working right
+    # TODO : Check if this is ok on larger GPU. 
     # TODO : imgs -- Torch dataset of (3xHxW) numpy images normalized in the range [-1, 1]
-
+    images = images.permute(0, 3, 1, 2)
     dataset = torch.utils.data.TensorDataset(images)
     inception_score_res = inception_score(dataset, cuda=True, batch_size=32, resize=True, splits=1)
 
