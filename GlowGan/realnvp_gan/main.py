@@ -351,7 +351,8 @@ def main(
                 # TODO JS Cosine similarity
                 tf.keras.backend.clear_session()
                 del image_gpt
-
+                device = torch.device("cuda:3")
+                samples_postproc = samples_postproc.to(device)
                 inception_score_res = measure_inception_score_on_sampled_images(samples_postproc) # Low GPU resources. 
                 samples_postproc = postprocess_fake2(samples, save_image_flag = True)
                 path = save_sampled_images_to_path(samples_postproc, path="/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/samples_temp")
