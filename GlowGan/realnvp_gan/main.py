@@ -337,7 +337,9 @@ def main(
             if epoch % 5 == 0:
                 
                 # Create ImageGPT Model : 
-                artifacts_path = imagegpt_artifact
+                samples, p_res = sample_images_from_generator(generator, n_samples=5000)
+                samples_postproc = postprocess_fake2(samples, save_image_flag = False)
+                
                 image_gpt = ImageGPT(
                     batch_size= batch_size,
                     devices= tf_device,
@@ -345,10 +347,11 @@ def main(
                     color_cluster_path='/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/imagegpt/artifacts/kmeans_centers.npy',
                     )
                 
-                samples, p_res = sample_images_from_generator(generator, n_samples=5000)
-                samples_postproc = postprocess_fake2(samples, save_image_flag = False)
                 q_res = run_imagegpt_on_sampled_images(samples_postproc, image_gpt, batch_size)
-                print ("--------- is -------")
+                # TODO JS Cosine similarity
+                tf.keras.backend.clear_session()
+                del image_gpt
+
                 inception_score_res = measure_inception_score_on_sampled_images(samples_postproc) # Low GPU resources. 
                 samples_postproc = postprocess_fake2(samples, save_image_flag = True)
                 path = save_sampled_images_to_path(samples_postproc, path="/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/samples_temp")
@@ -361,8 +364,7 @@ def main(
                 df_res, res_list = save_all_results_to_file(fdiv_res, inception_score, fid_res, epoch, df_res, res_path="/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/results/res.csv")
                 epoch, kld_res, tvd_res, chi2p_res, alpha25_res, alpha50_res, alpha75_res, inception_score, fid = res_list
                 wandb.log({"table": df_res})
-                tf.keras.backend.clear_session()
-                del image_gpt
+
 
                 
 
