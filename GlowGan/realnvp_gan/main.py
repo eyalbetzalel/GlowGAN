@@ -353,7 +353,7 @@ def main(
                 del image_gpt
                 device = torch.device("cuda:3")
                 samples_postproc = samples_postproc.to(device)
-                inception_score_res = measure_inception_score_on_sampled_images(samples_postproc) # Low GPU resources. 
+                # inception_score_res = measure_inception_score_on_sampled_images(samples_postproc) # Low GPU resources. 
                 samples_postproc = postprocess_fake2(samples, save_image_flag = True)
                 path = save_sampled_images_to_path(samples_postproc, path="/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/samples_temp")
                 fid_res = measure_fid_on_sampled_images(path_test_dst = path, gpu_num="0")
@@ -361,7 +361,7 @@ def main(
                 p_res = p_res.tolist()
                 q_res = q_res.tolist()
                 fdiv_res = measure_fdiv_on_sampled_images(p_res, q_res)
-                # inception_score = 0.0
+                inception_score = 0.0
                 df_res, res_list = save_all_results_to_file(fdiv_res, inception_score, fid_res, epoch, df_res, res_path="/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/results/res.csv")
                 epoch, kld_res, tvd_res, chi2p_res, alpha25_res, alpha50_res, alpha75_res, inception_score, fid = res_list
                 wandb.log({"table": df_res})
