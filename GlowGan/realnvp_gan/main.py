@@ -42,6 +42,10 @@ from datasets import get_CIFAR10, get_GMMSD, get_SVHN, preprocess, postprocess, 
 
 from imagegpt.imagegpt import ImageGPT
 from gmpm import *
+import pandas as pd
+import tensorflow as tf
+import time
+
 
 ################################################################################
 
@@ -220,6 +224,9 @@ def main(
     # ----------
     #  Training
     # ----------
+    columns=['Epoch','KL', 'Total Variation Distance', 'chi p', 'alpha 0.25', 'alpha 0.5', 'alpha 0.75', 'FID', 'IS']
+    df_res = pd.DataFrame(columns = columns)
+    res_table = wandb.Table(columns=columns)
 
     batches_done = 0
     for epoch in range(opt.n_epochs):
@@ -327,10 +334,9 @@ def main(
                             }, PATH)
             batches_done = batches_done + n_critic
         
-            # if epoch % 1 == 0:
-            if 0 == 0:
-                        
-                    # Create ImageGPT Model : 
+            if epoch % 5 == 0:
+                
+                # Create ImageGPT Model : 
                 artifacts_path = imagegpt_artifact
                 image_gpt = ImageGPT(
                     batch_size= batch_size,
@@ -338,17 +344,28 @@ def main(
                     ckpt_path='/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/imagegpt/artifacts/model.ckpt-1000000/model.ckpt-1000000',
                     color_cluster_path='/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/imagegpt/artifacts/kmeans_centers.npy',
                     )
-                samples, p = sample_images_from_generator(generator, n_samples=64)
+                
+                samples, p_res = sample_images_from_generator(generator, n_samples=5000)
                 samples_postproc = postprocess_fake2(samples, save_image_flag = False)
-                q = run_imagegpt_on_sampled_images(samples_postproc, image_gpt, batch_size)
-                # inception_score_res = measure_inception_score_on_sampled_images(samples_postproc) # Low GPU resources. 
+                q_res = run_imagegpt_on_sampled_images(samples_postproc, image_gpt, batch_size)
+                print ("--------- is -------")
+                inception_score_res = measure_inception_score_on_sampled_images(samples_postproc) # Low GPU resources. 
                 samples_postproc = postprocess_fake2(samples, save_image_flag = True)
                 path = save_sampled_images_to_path(samples_postproc, path="/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/samples_temp")
-                import ipdb; ipdb.set_trace()
                 fid_res = measure_fid_on_sampled_images(path_test_dst = path, gpu_num="0")
                 delete_sampled_images_from_path(path)
-                fdiv_res = measure_fdiv_on_sampled_images(p,q)
-                save_all_results_to_file(fdiv_res, inception_score, fid, epoch, path="./")
+                p_res = p_res.tolist()
+                q_res = q_res.tolist()
+                fdiv_res = measure_fdiv_on_sampled_images(p_res, q_res)
+                # inception_score = 0.0
+                df_res, res_list = save_all_results_to_file(fdiv_res, inception_score, fid_res, epoch, df_res, res_path="/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/results/res.csv")
+                epoch, kld_res, tvd_res, chi2p_res, alpha25_res, alpha50_res, alpha75_res, inception_score, fid = res_list
+                wandb.log({"table": df_res})
+                tf.keras.backend.clear_session()
+                del image_gpt
+
+                
+
             
 ################################################################################
 

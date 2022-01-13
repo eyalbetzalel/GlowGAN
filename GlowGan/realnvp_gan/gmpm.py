@@ -6,6 +6,8 @@ import os
 import shutil
 from inception_score import inception_score 
 from fdiv import *
+import pandas as pd
+import wandb
 
 # Sample images and measure p (likelihood) on this images by RealNVP:
 # TODO : Print timing for each step in the process. 
@@ -90,7 +92,7 @@ def run_imagegpt_on_sampled_images(images, imagegpt_class, batch_size):
         data_nll = imagegpt_class.eval_model(clustered_sampled_images)
         data_nll = [j for i in data_nll for j in i] # flatten list
         nll.append(data_nll)
-    nll = [i for i in data_nll] # flatten list
+    nll = [j for i in nll for j in i] # flatten list
     nll_np = np.asarray(nll)
     q_res = np.exp(-1.0 * nll_np)
     return q_res
@@ -136,16 +138,33 @@ def measure_inception_score_on_sampled_images(images):
 
 def measure_fdiv_on_sampled_images(p,q):
     
-    kld, _ = kld(p, q)
-    tvd, _ = tvd(p, q)
-    chi2p, _ = chi2_pearson(p, q)
-    alpha25, _ = alphadiv(p, q, alpha=0.25)
-    alpha50, _ = alphadiv(p, q, alpha=0.5)
-    alpha75, _ = alphadiv(p, q, alpha=0.75)
-    fdiv_res = (kld, tvd, chi2p, alpha25, alpha50, alpha75)
+    kld_res, _ = kld(p, q)
+    tvd_res, _ = tvd(p, q)
+    chi2p_res, _ = chi2_pearson(p, q)
+    alpha25_res, _ = alphadiv(p, q, alpha=0.25)
+    alpha50_res, _ = alphadiv(p, q, alpha=0.5)
+    alpha75_res, _ = alphadiv(p, q, alpha=0.75)
+    fdiv_res = (kld_res, tvd_res, chi2p_res, alpha25_res, alpha50_res, alpha75_res)
     return fdiv_res
 
-def save_all_results_to_file(fdiv_res, inception_score, fid, epoch, path="./"):
-    kld, tvd, chi2p, alpha25, alpha50, alpha75 = fdiv_res
-    # TODO 
-    return () 
+def save_all_results_to_file(fdiv_res, inception_score, fid, epoch, df, res_path): 
+    
+    kld_res, tvd_res, chi2p_res, alpha25_res, alpha50_res, alpha75_res = fdiv_res
+    
+    res_list = (epoch, kld_res, tvd_res, chi2p_res, alpha25_res, alpha50_res, alpha75_res, inception_score, fid)
+    
+    df = df.append({
+    'Epoch':epoch,
+    'KL':kld_res, 
+    'Total Variation Distance':tvd_res, 
+    'chi p':chi2p_res, 
+    'alpha 0.25':alpha25_res, 
+    'alpha 0.5':alpha50_res, 
+    'alpha 0.75':alpha75_res, 
+    'FID':fid, 
+    'IS':inception_score
+    }, ignore_index=True)
+    
+    df.to_csv(res_path)
+    
+    return df, res_list
