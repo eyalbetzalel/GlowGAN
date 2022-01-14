@@ -157,7 +157,7 @@ def measure_fdiv_on_sampled_images(p,q):
     fdiv_res = (kld_res, tvd_res, chi2p_res, alpha25_res, alpha50_res, alpha75_res)
     return fdiv_res
 
-def save_all_results_to_file(fdiv_res, inception_score, fid, epoch, df, res_path): 
+def save_all_results_to_file(fdiv_res, g_loss, js_div, inception_score, fid, epoch, df, res_path): 
     
     kld_res, tvd_res, chi2p_res, alpha25_res, alpha50_res, alpha75_res = fdiv_res
     
@@ -170,7 +170,9 @@ def save_all_results_to_file(fdiv_res, inception_score, fid, epoch, df, res_path
     'chi p':chi2p_res, 
     'alpha 0.25':alpha25_res, 
     'alpha 0.5':alpha50_res, 
-    'alpha 0.75':alpha75_res, 
+    'alpha 0.75':alpha75_res,
+    'JS' :  js_div,
+    'G_Loss': g_loss,
     'FID':fid, 
     'IS':inception_score
     }, ignore_index=True)
