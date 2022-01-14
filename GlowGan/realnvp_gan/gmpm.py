@@ -12,20 +12,30 @@ import wandb
 # Sample images and measure p (likelihood) on this images by RealNVP:
 # TODO : Print timing for each step in the process. 
 
-def sample_images_from_generator(model, n_samples):
+def sample_images_from_generator(model, n_samples, compute_grad=False):
     print("--- Start : sample 5K images ---")
     samples_all = torch.empty(0, 3, 32, 32).cpu()
     log_prob_all = torch.empty(0).cpu()
     count = 0
     model.eval()
-    with torch.no_grad():
+    if not(compute_grad):
+        with torch.no_grad():
+            while count < n_samples:
+                samples = model.sample(32)
+                samples, _ = data_utils.logit_transform(samples, reverse=True)
+                log_prob = model.log_prob(samples)
+                samples_all = torch.cat((samples_all,samples.detach().cpu()), dim=0)
+                log_prob_all = torch.cat((log_prob_all, log_prob.detach().cpu()), dim=0)
+                count += 50
+    else :    
         while count < n_samples:
-          samples = model.sample(32)
-          samples, _ = data_utils.logit_transform(samples, reverse=True)
-          log_prob = model.log_prob(samples)
-          samples_all = torch.cat((samples_all,samples.detach().cpu()), dim=0)
-          log_prob_all = torch.cat((log_prob_all, log_prob.detach().cpu()), dim=0)
-          count += 50
+            samples = model.sample(32)
+            samples, _ = data_utils.logit_transform(samples, reverse=True)
+            log_prob = model.log_prob(samples)
+            samples_all = torch.cat((samples_all,samples.detach().cpu()), dim=0)
+            log_prob_all = torch.cat((log_prob_all, log_prob.detach().cpu()), dim=0)
+            count += 50
+
     print("--- Finish : sample 5K images ---")
     p = torch.exp(log_prob_all)
     samples_all = samples_all.permute(0,2,3,1)

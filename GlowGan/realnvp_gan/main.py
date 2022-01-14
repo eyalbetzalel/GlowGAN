@@ -45,7 +45,7 @@ from gmpm import *
 import pandas as pd
 import tensorflow as tf
 import time
-
+from js_test import *
 
 ################################################################################
 
@@ -227,6 +227,7 @@ def main(
     columns=['Epoch','KL', 'Total Variation Distance', 'chi p', 'alpha 0.25', 'alpha 0.5', 'alpha 0.75', 'FID', 'IS']
     df_res = pd.DataFrame(columns = columns)
     res_table = wandb.Table(columns=columns)
+    cosine_similarity = torch.nn.CosineSimilarity()
 
     batches_done = 0
     for epoch in range(opt.n_epochs):
@@ -336,9 +337,37 @@ def main(
         
             if epoch % 5 == 0:
                 
-                # Create ImageGPT Model : 
-                samples, p_res = sample_images_from_generator(generator, n_samples=5000)
-                samples_postproc = postprocess_fake2(samples, save_image_flag = False)
+                # # Create ImageGPT Model : 
+                # samples, p_res = sample_images_from_generator(generator, n_samples=5000)
+                # samples_postproc = postprocess_fake2(samples, save_image_flag = False)
+                
+                # image_gpt = ImageGPT(
+                #     batch_size= batch_size,
+                #     devices= tf_device,
+                #     ckpt_path='/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/imagegpt/artifacts/model.ckpt-1000000/model.ckpt-1000000',
+                #     color_cluster_path='/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/imagegpt/artifacts/kmeans_centers.npy',
+                #     )
+                
+                # q_res = run_imagegpt_on_sampled_images(samples_postproc, image_gpt, batch_size)
+                # tf.keras.backend.clear_session()
+                # del image_gpt
+                # device = torch.device("cuda:3")
+                # samples_postproc = samples_postproc.to(device)
+                # # inception_score_res = measure_inception_score_on_sampled_images(samples_postproc) # Low GPU resources. 
+                # samples_postproc = postprocess_fake2(samples, save_image_flag = True)
+                # path = save_sampled_images_to_path(samples_postproc, path="/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/samples_temp")
+                # fid_res = measure_fid_on_sampled_images(path_test_dst = path, gpu_num="0")
+                # delete_sampled_images_from_path(path)
+                # p_res = p_res.tolist()
+                # q_res = q_res.tolist()
+                # fdiv_res = measure_fdiv_on_sampled_images(p_res, q_res)
+                # inception_score = 0.0
+                # df_res, res_list = save_all_results_to_file(fdiv_res, inception_score, fid_res, epoch, df_res, res_path="/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/results/res.csv")
+                # epoch, kld_res, tvd_res, chi2p_res, alpha25_res, alpha50_res, alpha75_res, inception_score, fid = res_list
+                # wandb.log({"table": df_res})
+
+                # JS : 
+                import ipdb; ipdb.set_trace()
                 
                 image_gpt = ImageGPT(
                     batch_size= batch_size,
@@ -347,29 +376,54 @@ def main(
                     color_cluster_path='/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/imagegpt/artifacts/kmeans_centers.npy',
                     )
                 
-                q_res = run_imagegpt_on_sampled_images(samples_postproc, image_gpt, batch_size)
-                # TODO JS Cosine similarity
+                # Samples from realnvp : 
+                    
+                    # Sample from RealNVP:
+                samples_realnvp, p_realnvp = sample_images_from_generator(generator, n_samples=batch_size,compute_grad=True)
+                    
+                    # ImageGPT :
+                samples_realnvp_postproc = postprocess_fake2(samples_realnvp, save_image_flag = False)
+                q_imagegpt = run_imagegpt_on_sampled_images(samples_realnvp_postproc, image_gpt, batch_size)
+
+                # Samples from ImageGPT : 
+
+                    # Sample from ImageGPT (train loader) :
+                samples_imagegpt, _ = next(iter(train_loader))
+                samples_imagegpt = Variable(samples_imagegpt.type(Tensor))
+                samples_imagegpt = 0.555 * samples_imagegpt + 0.5
+                
+                    # RealNVP : 
+                log_q_realnvp = generator.log_prob(samples_imagegpt)
+                q_realnvp = torch.exp(log_q_realnvp)
+                
+                    # ImnageGPT : 
+                samples_imagegpt = postprocess_fake2(samples_imagegpt) # Output --> [0,1]
+                p_imagegpt = run_imagegpt_on_sampled_images(samples_imagegpt, image_gpt, batch_size)
+
                 tf.keras.backend.clear_session()
                 del image_gpt
-                device = torch.device("cuda:3")
-                samples_postproc = samples_postproc.to(device)
-                # inception_score_res = measure_inception_score_on_sampled_images(samples_postproc) # Low GPU resources. 
-                samples_postproc = postprocess_fake2(samples, save_image_flag = True)
-                path = save_sampled_images_to_path(samples_postproc, path="/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/samples_temp")
-                fid_res = measure_fid_on_sampled_images(path_test_dst = path, gpu_num="0")
-                delete_sampled_images_from_path(path)
-                p_res = p_res.tolist()
-                q_res = q_res.tolist()
-                fdiv_res = measure_fdiv_on_sampled_images(p_res, q_res)
-                inception_score = 0.0
-                df_res, res_list = save_all_results_to_file(fdiv_res, inception_score, fid_res, epoch, df_res, res_path="/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/results/res.csv")
-                epoch, kld_res, tvd_res, chi2p_res, alpha25_res, alpha50_res, alpha75_res, inception_score, fid = res_list
-                wandb.log({"table": df_res})
 
+                # Cals Jenson-Shannon Divergence :
+
+                js_div = calc_js_div(p_imagegpt, p_realnvp, q_imagegpt, q_realnvp)
+
+                # Calc gradients : 
+
+                # js : 
+
+                loss_js = -1.0 * torch.log(4) + 2.0 * js_div
+                grad_js = calc_gradient(generator, loss_js)
+
+                # gan :
+                 
+                fake_imgs, _ = sample_images_from_generator(generator, batch_size, compute_grad=True)
+                valid = Variable(Tensor(fake_imgs.size(0), 1).fill_(1.0), requires_grad=False)
+                g_loss = adversarial_loss(discriminator(fake_imgs), valid)
+                grad_gan = calc_gradient(generator, loss_js)
 
                 
+                output = cosine_similarity(grad_js, grad_gan)
 
-            
 ################################################################################
 
 # Arguments : 

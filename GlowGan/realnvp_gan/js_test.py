@@ -1,13 +1,29 @@
-def measure_prob_on_imagegpt_samples(generator, imagegpt_class, imgs):
-    p_imagegpt, q_realnvp= 0, 0
-    return p_imagegpt, q_realnvp
+
+import torch 
 
 def calc_js_div(p_imagegpt, p_realnvp, q_imagegpt, q_realnvp):
-    js_div=0
-    return js_div
+        
+        log_p_imagegpt = torch.log(p_imagegpt)
+        log_p_realnvp = torch.log(p_realnvp)
+        log_q_imagegpt = torch.log(q_imagegpt)
+        log_q_realnvp = torch.log(q_realnvp)
 
-def calc_gradient(net):
-    grad=0
+        logM_z = torch.log(0.5) + torch.logsumexp(torch.stack((log_p_realnvp.squeeze(), log_q_imagegpt.squeeze())), dim=0)
+        logM_x = torch.log(0.5) + torch.logsumexp(torch.stack((log_q_realnvp.squeeze(), log_p_imagegpt.squeeze())), dim=0)
+
+        return 0.5 * ((log_p_imagegpt - logM_x).sum() + (log_p_realnvp - logM_z).sum())
+    
+
+def calc_gradient(model, loss):
+    g = list(
+        torch.autograd.grad(
+            loss,
+            model.parameters(),
+            retain_graph=True,
+            )
+        )
+    grad = torch.cat([torch.flatten(grad) for grad in g])
+    model.zero_grad()
     return grad
 
 def calc_cosine_similarity(vec1, vec2):
