@@ -23,9 +23,9 @@ def preprocess(x):
     return x
 
 def postprocess_fake(x):
-    x = x + 0.05
-    x = torch.clamp(x, 0.0, 1.1)
-    x = x / 1.1
+    # x = x + 0.05
+    # x = torch.clamp(x, 0.0, 1.1)
+    # x = x / 1.1
     x = x * 2 ** n_bits
     return torch.clamp(x, 0, 255).byte()
     

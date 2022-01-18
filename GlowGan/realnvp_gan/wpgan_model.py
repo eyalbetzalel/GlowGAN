@@ -1,5 +1,6 @@
 import torch.nn as nn
 import numpy as np
+import torch
 
 class Generator(nn.Module):
     def __init__(self, img_shape, latent_dim):
@@ -44,6 +45,6 @@ class Discriminator(nn.Module):
         )
 
     def forward(self, img):
-        img_flat = img.contiguous().view(img.shape[0], -1)
+        img_flat = img.contiguous().view(img.shape[0], -1).float()
         validity = self.model(img_flat)
         return validity

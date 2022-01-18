@@ -3,18 +3,17 @@ import torch
 
 def calc_js_div(p_imagegpt, p_realnvp, q_imagegpt, q_realnvp):
         
-        p_imagegpt = torch.tensor(p_imagegpt)
-        q_imagegpt = torch.tensor(q_imagegpt)
-        
-        
-        
+        p_imagegpt = torch.tensor(p_imagegpt).to("cuda:0")
+        q_imagegpt = torch.tensor(q_imagegpt).to("cuda:0")
         log_p_imagegpt = torch.log(p_imagegpt)
         log_p_realnvp = torch.log(p_realnvp)
+        
 #        log_q_imagegpt = torch.log(q_imagegpt)
 #        log_q_realnvp = torch.log(q_realnvp)
         
 #        log_q_imagegpt = log_q_imagegpt.to("cuda:0")
 #        log_p_imagegpt = log_p_imagegpt.to("cuda:0")
+
         logM_x = torch.log((p_imagegpt + q_realnvp)/2)
         logM_z = torch.log((q_imagegpt + p_realnvp)/2)
         
@@ -26,12 +25,16 @@ def calc_js_div(p_imagegpt, p_realnvp, q_imagegpt, q_realnvp):
 
 def calc_gradient(model, loss):
     # model.zero_grad()
+    import ipdb; ipdb.set_trace()
+    model = model.to("cuda:0")
+    loss = loss.to("cuda:0")
+    pyy = list(model.parameters())
+    
     g = list(
         torch.autograd.grad(
             loss,
-            model.parameters(),
+            [pp for pp in pyy if pp.requires_grad],
             retain_graph=True,
-            allow_unused=True,
             )
         )
     grad = torch.cat([torch.flatten(grad) for grad in g])

@@ -24,17 +24,19 @@ def sample_images_from_generator(model, n_samples, compute_grad=False):
                 samples = model.sample(32)
                 samples, _ = data_utils.logit_transform(samples, reverse=True)
                 log_prob = model.log_prob(samples)
+                log_prob /= 32
                 samples_all = torch.cat((samples_all,samples.detach().cpu()), dim=0)
                 log_prob_all = torch.cat((log_prob_all, log_prob.detach().cpu()), dim=0)
-                count += 50
+                count += 32
     else :    
         while count < n_samples:
             samples = model.sample(32)
             samples, _ = data_utils.logit_transform(samples, reverse=True)
             log_prob = model.log_prob(samples)
+            log_prob /= 32
             samples_all = torch.cat((samples_all,samples.detach().cpu()), dim=0)
             log_prob_all = torch.cat((log_prob_all, log_prob.detach().cpu()), dim=0)
-            count += 50
+            count += 32
 
     print("--- Finish : sample 5K images ---")
     p = torch.exp(log_prob_all)
@@ -77,9 +79,9 @@ def postprocess_fake2(x, save_image_flag = False):
     # if save_image_flag is True [0, 255] for imsave.
 
     n_bits = 8
-    x = x + 0.05 
-    x = np.clip(x, 0.0, 1.1) # x is now [0, 1.1]
-    x = x / 1.1 # x is now [0, 1]
+    #x = x + 0.05 
+    # x = np.clip(x, 0.0, 1.1) # x is now [0, 1.1]
+    # x = x / 1.1 # x is now [0, 1]
    
     if save_image_flag:
         x = x * 2 ** n_bits
