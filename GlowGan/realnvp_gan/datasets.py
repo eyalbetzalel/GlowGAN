@@ -153,14 +153,15 @@ def get_GMMSD(augment, dataroot, download, batch_size):
     ind = int(images.shape[0]*0.7)
     trainX = images[:ind]
     # trainX = images[:1024]
-    # trainY = torch.tensor(ll[:ind], device=device)
-    trainY = torch.ones(trainX.shape[0])
+    trainY = torch.tensor(ll[:ind], device=device)
+    # trainY = torch.ones(trainX.shape[0])
     testX = images[ind+1:]
-    # testY = torch.tensor(ll[ind+1:], device=device)
-    testY = torch.ones(testX.shape[0])
+    testY = torch.tensor(ll[ind+1:], device=device)
+    #testY = torch.ones(testX.shape[0])
     train_dataset = torch.utils.data.TensorDataset(trainX, trainY)
     test_dataset = torch.utils.data.TensorDataset(testX, testY)
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size = batch_size)
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size = batch_size)
+    
     return image_shape, num_classes, train_loader, test_loader
 

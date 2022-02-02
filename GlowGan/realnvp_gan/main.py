@@ -211,7 +211,9 @@ def main(
         torch.tensor(1.).to(device)
         )
     data_info = data_utils.DataInfo("gmmsd", 3, 32)
-    wandb.config = {"learning_rate": lr, "epochs": n_epochs, "batch_size": 64}
+    wandb.config.learning_rate = lr 
+    wandb.config.epochs = n_epochs 
+    wandb.config.batch_size =  batch_size
 
     # Initialize generator and discriminator:
     generator = realnvp.RealNVP(
