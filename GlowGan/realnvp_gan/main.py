@@ -187,6 +187,14 @@ def main(
     
     # Train : 
 
+    def weights_init_normal(m):
+        classname = m.__class__.__name__
+        if classname.find("Conv") != -1:
+            torch.nn.init.normal_(m.weight.data, 0.0, 0.02)
+        elif classname.find("BatchNorm2d") != -1:
+            torch.nn.init.normal_(m.weight.data, 1.0, 0.02)
+            torch.nn.init.constant_(m.bias.data, 0.0)
+    
     def sample_from_realnvp(model, batch_size):
         model.train()
         samples = model.sample(batch_size)
@@ -224,10 +232,13 @@ def main(
     
     # Switch REALNVP by regular generator :     
     discriminator = Discriminator(img_shape).to(device)
-
+  
+  
+    discriminator.apply(weights_init_normal)
+    
     # Loss function : 
     adversarial_loss = torch.nn.BCELoss()
-    # adversarial_loss = adversarial_loss.to(device)
+    adversarial_loss = adversarial_loss.to(device)
     # Optimizers:
     # optimizer_G = optim.Adamax(generator.parameters(), lr=lr, betas=(momentum, decay), eps=1e-7)
     optimizer_G = torch.optim.Adam(generator.parameters(), lr=lr, betas=(opt.b1, opt.b2))
@@ -249,32 +260,35 @@ def main(
         color_cluster_path='/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/imagegpt/artifacts/kmeans_centers.npy',
         )
         
-    lambda_gp = 10
-    def compute_gradient_penalty(D, real_samples, fake_samples):
-    
-      """Calculates the gradient penalty loss for WGAN GP"""
-      # Random weight term for interpolation between real and fake samples
-      alpha = torch.tensor(np.random.random((real_samples.size(0), 1, 1, 1)))
-      alpha = alpha.to("cuda:0")
-      # Get random interpolation between real and fake samples
-      interpolates = (alpha * real_samples + ((1 - alpha) * fake_samples)).requires_grad_(True)
-      d_interpolates = D(interpolates)
-      fake = torch.ones((real_samples.shape[0], 1))
-      fake = fake.to("cuda:0")
-      # Get gradient w.r.t. interpolates
-      gradients = autograd.grad(
-          outputs=d_interpolates,
-          inputs=interpolates,
-          grad_outputs=fake,
-          create_graph=True,
-          retain_graph=True,
-          only_inputs=True,
-      )[0]
-      gradients = gradients.view(gradients.size(0), -1)
-      gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
-      return gradient_penalty
+#    lambda_gp = 10
+#    def compute_gradient_penalty(D, real_samples, fake_samples):
+#    
+#      """Calculates the gradient penalty loss for WGAN GP"""
+#      # Random weight term for interpolation between real and fake samples
+#      alpha = torch.tensor(np.random.random((real_samples.size(0), 1, 1, 1)))
+#      alpha = alpha.to("cuda:0")
+#      # Get random interpolation between real and fake samples
+#      interpolates = (alpha * real_samples + ((1 - alpha) * fake_samples)).requires_grad_(True)
+#      d_interpolates = D(interpolates)
+#      fake = torch.ones((real_samples.shape[0], 1))
+#      fake = fake.to("cuda:0")
+#      # Get gradient w.r.t. interpolates
+#      gradients = autograd.grad(
+#          outputs=d_interpolates,
+#          inputs=interpolates,
+#          grad_outputs=fake,
+#          create_graph=True,
+#          retain_graph=True,
+#          only_inputs=True,
+#      )[0]
+#      gradients = gradients.view(gradients.size(0), -1)
+#      gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+#      return gradient_penalty
     
     for epoch in range(opt.n_epochs):
+    
+        flag_sample = 1
+        
         for i, (imgs, _) in enumerate(train_loader):
             
             if imgs.size(0) != batch_size:
@@ -283,6 +297,26 @@ def main(
             # Configure input
             real_imgs = Variable(imgs.type(Tensor))
             real_imgs = 0.5 * real_imgs + 0.5
+            
+            valid = Variable(Tensor(imgs.shape[0], 1).fill_(1.0), requires_grad=False).to("cuda:0")
+            fake = Variable(Tensor(imgs.shape[0], 1).fill_(0.0), requires_grad=False).to("cuda:0")
+            
+            # -----------------
+            #  Train Generator
+            # -----------------
+
+            optimizer_G.zero_grad()
+            
+            # Generate a batch of images
+            
+            fake_imgs = sample_from_realnvp(generator, imgs.size(0))
+            
+            fake_validity = discriminator(fake_imgs)
+            
+            g_loss = adversarial_loss(fake_validity, valid)
+            
+            g_loss.backward()
+            optimizer_G.step()
             
             
             # ---------------------
@@ -297,45 +331,26 @@ def main(
             # Real images
             real_validity = discriminator(real_imgs)
             # Fake images
-            fake_validity = discriminator(fake_imgs)
-            # Gradient penalty
+            fake_validity = discriminator(fake_imgs.detach())
+            real_loss = adversarial_loss(real_validity, valid)
+            fake_loss = adversarial_loss(fake_validity, fake)
+            d_loss = (real_loss + fake_loss) / 2
             
-            gradient_penalty = compute_gradient_penalty(discriminator, real_imgs.data, fake_imgs.data)
-            # Adversarial loss
-            d_loss = -torch.mean(real_validity) + torch.mean(fake_validity) + lambda_gp * gradient_penalty
 
             d_loss.backward()
             optimizer_D.step()
+           
+            wandb.log({"d_loss": d_loss})
+            wandb.log({"d_real_loss": real_loss})
+            wandb.log({"d_fake_loss": fake_loss})
+            wandb.log({"g_loss": g_loss})
             
-            # -----------------
-            #  Train Generator
-            # -----------------
-
-            optimizer_G.zero_grad()
-            
-            if i % opt.n_critic  == 0 and epoch>0:
-            
-                # Generate a batch of images
-                
-                fake_imgs = sample_from_realnvp(generator, imgs.size(0))
-                
-                fake_validity = discriminator(fake_imgs)
-                
-                g_loss = -torch.mean(fake_validity)
-                
-                g_loss.backward()
-                optimizer_G.step()
-    
-               
-                wandb.log({"d_loss": d_loss})
-                wandb.log({"g_loss": g_loss})
-            
-                print(
-                    "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
-                    % (epoch, n_epochs, i, len(train_loader), d_loss.item(), g_loss.item())
-                    )
+            print(
+                "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
+                % (epoch, n_epochs, i, len(train_loader), d_loss.item(), g_loss.item())
+                )
                     
-            if batches_done % sample_interval == 0 and epoch>0:
+            if epoch % 10 == 0 and flag_sample:
 
                 # ---------------------
                 #  Sampling
@@ -389,85 +404,88 @@ def main(
                             }, PATH)
             batches_done = batches_done + n_critic
         
-#            if batches_done > 100:
+            if epoch % 10 == 0 and flag_sample:
+            
     #############################################################################################################################################        
-#                # Create ImageGPT Model :
-#                import ipdb; ipdb.set_trace() 
-#                samples, p_res = sample_images_from_generator(generator, n_samples=100)
-#                samples = samples.detach().cpu()  
-#                p_res = p_res.detach().cpu()
-#                samples_postproc = 2.0 * (samples - 0.5) # [0,1] --> [-1,1]
-#                q_res = run_imagegpt_on_sampled_images(samples_postproc, image_gpt, batch_size)
-#                # inception_score_res = measure_inception_score_on_sampled_images(samples_postproc) # Low GPU resources. 
-#                samples_postproc = postprocess_fake2(samples, save_image_flag = True)
-#                path = save_sampled_images_to_path(samples_postproc, path="/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/samples_temp_small_train_set")
-#                fid_res = measure_fid_on_sampled_images(path_test_dst = path, gpu_num="1")
-#                delete_sampled_images_from_path(path)
-#                p_res = p_res.tolist()
-#                q_res = q_res.tolist()
-#                fdiv_res = measure_fdiv_on_sampled_images(p_res, q_res)
-#                inception_score = 0.0
+                
+                # Create ImageGPT Model :
+                 
+                samples, p_res = sample_images_from_generator(generator, n_samples=100)
+                samples = samples.detach().cpu()  
+                p_res = p_res.detach().cpu()
+                samples_postproc = 2.0 * (samples - 0.5) # [0,1] --> [-1,1]
+                q_res = run_imagegpt_on_sampled_images(samples_postproc, image_gpt, batch_size)
+                # inception_score_res = measure_inception_score_on_sampled_images(samples_postproc) # Low GPU resources. 
+                samples_postproc = postprocess_fake2(samples, save_image_flag = True)
+                path = save_sampled_images_to_path(samples_postproc, path="/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/samples_temp_small_train_set")
+                fid_res = measure_fid_on_sampled_images(path_test_dst = path, gpu_num="0")
+                delete_sampled_images_from_path(path)
+                p_res = p_res.tolist()
+                q_res = q_res.tolist()
+                fdiv_res = measure_fdiv_on_sampled_images(p_res, q_res)
+                inception_score = 0.0
+                
     #############################################################################################################################################
 #        
-#              # JS : 
-#              
-#                # Samples from realnvp : 
-#                    
-#                    # Sample from RealNVP:
-#                
-#                samples_realnvp, p_realnvp = sample_from_realnvp_for_js(generator, batch_size)
-#                    
-#                    # ImageGPT :
-#                samples_realnvp_np = samples_realnvp.detach().cpu()
-#                samples_realnvp_postproc = 2.0 * (samples_realnvp_np - 0.5) # [0,1] --> [-1,1] 
-#                q_imagegpt = run_imagegpt_on_sampled_images(samples_realnvp_postproc, image_gpt, batch_size)
-#                
-#                # Samples from ImageGPT : 
-#                
-#                    # Sample from ImageGPT (train loader) :
-#                samples_imagegpt1, _ = next(iter(train_loader)) # [-1, 1]
-#                samples_imagegpt1 = samples_imagegpt1.detach().cpu()
-#                samples_imagegpt2 = 0.5 * samples_imagegpt1 + 0.5 # [-1, 1] --> [0, 1]
-#                
-#                    # ImnageGPT : 
-#                
-#                p_imagegpt = run_imagegpt_on_sampled_images(samples_imagegpt1, image_gpt, batch_size) # samples_imagegpt1 --> [-1, 1]
-#    
-#                
-#                    # RealNVP : 
-#                log_q_realnvp = generator.log_prob(samples_imagegpt2.to("cuda:0").permute(0,3,1,2))
-#                log_q_realnvp = log_q_realnvp / batch_size
-#                q_realnvp = torch.exp(log_q_realnvp)
-#                
-#                
-#                # Cals Jenson-Shannon Divergence :
-#                js_div = calc_js_div(p_imagegpt, p_realnvp, q_imagegpt, q_realnvp)
-#                # js_div = js_div.numpy()
-#                
-#                # Calc gradients : 
-#                
-#                # js : 
-#                loss_js = -1.0 * torch.log(torch.tensor(4.0)) + 2.0 * js_div
-#                
-#                grad_js = calc_gradient(generator, loss_js)
-#                # gan :
-#                fake_imgs, _ = sample_images_from_generator(generator, batch_size, compute_grad=False)
-#                fake_imgs = samples_realnvp.to("cuda:0")
-#                fake_imgs = fake_imgs.to("cuda:0")
-#                # valid = Variable(Tensor(fake_imgs.size(0), 1).fill_(1.0), requires_grad=False)
-#                g_loss = adversarial_loss(discriminator(fake_imgs), valid)
-#                # grad_gan = calc_gradient(generator, loss_js)
-#                # output = cosine_similarity(grad_js, grad_gan)
-#                
-#                # Save all results: 
-#                g_loss = g_loss.detach().cpu().numpy()
-#        
-#                # g_loss = 0.0
-#                js_div = js_div.detach().cpu().numpy()
-#                df_res, res_list = save_all_results_to_file(fdiv_res, g_loss, js_div, inception_score, fid_res, epoch, df_res, res_path="/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/results/res_small_train_set.csv")
-#                epoch, kld_res, tvd_res, chi2p_res, alpha25_res, alpha50_res, alpha75_res, inception_score, fid = res_list
-#                wandb.log({"table": df_res})
+              # JS : 
+              
+                # Samples from realnvp : 
+                    
+                    # Sample from RealNVP:
                 
+                samples_realnvp, p_realnvp = sample_from_realnvp_for_js(generator, batch_size)
+                    
+                    # ImageGPT :
+                samples_realnvp_np = samples_realnvp.detach().cpu()
+                samples_realnvp_postproc = 2.0 * (samples_realnvp_np - 0.5) # [0,1] --> [-1,1] 
+                q_imagegpt = run_imagegpt_on_sampled_images(samples_realnvp_postproc, image_gpt, batch_size)
+                
+                # Samples from ImageGPT : 
+                
+                    # Sample from ImageGPT (train loader) :
+                samples_imagegpt1, _ = next(iter(train_loader)) # [-1, 1]
+                samples_imagegpt1 = samples_imagegpt1.detach().cpu()
+                samples_imagegpt2 = 0.5 * samples_imagegpt1 + 0.5 # [-1, 1] --> [0, 1]
+                
+                    # ImnageGPT : 
+                
+                p_imagegpt = run_imagegpt_on_sampled_images(samples_imagegpt1, image_gpt, batch_size) # samples_imagegpt1 --> [-1, 1]
+    
+                
+                    # RealNVP : 
+                log_q_realnvp = generator.log_prob(samples_imagegpt2.to("cuda:0").permute(0,3,1,2))
+                log_q_realnvp = log_q_realnvp / batch_size
+                q_realnvp = torch.exp(log_q_realnvp)
+                
+                
+                # Cals Jenson-Shannon Divergence :
+                js_div = calc_js_div(p_imagegpt, p_realnvp, q_imagegpt, q_realnvp)
+                # js_div = js_div.numpy()
+                
+                # Calc gradients : 
+                
+                # js : 
+                # loss_js = -1.0 * torch.log(torch.tensor(4.0)) + 2.0 * js_div
+                
+                # grad_js = calc_gradient(generator, loss_js)
+                # gan :
+                fake_imgs, _ = sample_images_from_generator(generator, batch_size, compute_grad=False)
+                fake_imgs = samples_realnvp.to("cuda:0")
+                fake_imgs = fake_imgs.to("cuda:0")
+                # valid = Variable(Tensor(fake_imgs.size(0), 1).fill_(1.0), requires_grad=False)
+                g_loss = adversarial_loss(discriminator(fake_imgs), valid)
+                # grad_gan = calc_gradient(generator, loss_js)
+                # output = cosine_similarity(grad_js, grad_gan)
+                
+                # Save all results: 
+                g_loss = g_loss.detach().cpu().numpy()
+        
+                # g_loss = 0.0
+                js_div = js_div.detach().cpu().numpy()
+                df_res, res_list = save_all_results_to_file(fdiv_res, g_loss, js_div, inception_score, fid_res, epoch, df_res, res_path="/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/results/res_small_train_set.csv")
+                epoch, kld_res, tvd_res, chi2p_res, alpha25_res, alpha50_res, alpha75_res, inception_score, fid = res_list
+                wandb.log({"table": df_res})
+                flag_sample = 0
                 
 
 
@@ -481,16 +499,16 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--n_epochs", type=int, default=20000, help="number of epochs of training")
-    parser.add_argument("--lr", type=float, default=0.0002, help="adam: learning rate")
+    parser.add_argument("--lr", type=float, default=0.00001, help="adam: learning rate")
     parser.add_argument("--b1", type=float, default=0.5, help="adam: decay of first order momentum of gradient")
     parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
     parser.add_argument("--n_cpu", type=int, default=8, help="number of cpu threads to use during batch generation")
     parser.add_argument("--latent_dim", type=int, default=100, help="dimensionality of the latent space")
     parser.add_argument("--img_size", type=int, default=32, help="size of each image dimension")
     parser.add_argument("--channels", type=int, default=3, help="number of image channels")
-    parser.add_argument("--n_critic", type=int, default=5, help="number of training steps for discriminator per iter")
+    parser.add_argument("--n_critic", type=int, default=1, help="number of training steps for discriminator per iter")
     parser.add_argument("--clip_value", type=float, default=0.01, help="lower and upper clip value for disc. weights")
-    parser.add_argument("--sample_interval", type=int, default=1000, help="interval betwen image samples")
+    parser.add_argument("--sample_interval", type=int, default=100, help="interval betwen image samples")
 
     # REAL - NVP :
      

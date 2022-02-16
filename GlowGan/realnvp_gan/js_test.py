@@ -25,7 +25,6 @@ def calc_js_div(p_imagegpt, p_realnvp, q_imagegpt, q_realnvp):
 
 def calc_gradient(model, loss):
     # model.zero_grad()
-    import ipdb; ipdb.set_trace()
     model = model.to("cuda:0")
     loss = loss.to("cuda:0")
     pyy = list(model.parameters())
