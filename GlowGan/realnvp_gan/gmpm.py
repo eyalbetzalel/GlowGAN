@@ -23,8 +23,9 @@ def sample_images_from_generator(model, n_samples, compute_grad=False):
             while count < n_samples:
                 samples = model.sample(32)
                 samples, _ = data_utils.logit_transform(samples, reverse=True)
+                samples = torch.clamp(samples,0,1)
                 log_prob = model.log_prob(samples)
-                log_prob /= 32
+                log_prob /= (32*32*3) # avarge log probability per pixel
                 samples_all = torch.cat((samples_all,samples.detach().cpu()), dim=0)
                 log_prob_all = torch.cat((log_prob_all, log_prob.detach().cpu()), dim=0)
                 count += 32
@@ -39,9 +40,9 @@ def sample_images_from_generator(model, n_samples, compute_grad=False):
             count += 32
 
     print("--- Finish : sample 5K images ---")
-    p = torch.exp(log_prob_all)
+    # p = torch.exp(log_prob_all)
     samples_all = samples_all.permute(0,2,3,1)
-    return samples_all, p
+    return samples_all, log_prob_all
 
 # Files handeling:
 
@@ -54,7 +55,7 @@ def save_sampled_images_to_path(images, path="./samples_temp"):
 
     for i in range(images.shape[0]):
 
-        img = images[0]
+        img = images[i]
         fname = "img_" + str(i) + ".png"
         img_path_str = os.path.join(path,fname)
         # save_image get numbers in [0,1] [C,H,W]:
@@ -106,8 +107,9 @@ def run_imagegpt_on_sampled_images(images, imagegpt_class, batch_size):
         nll.append(data_nll)
     nll = [j for i in nll for j in i] # flatten list
     nll_np = np.asarray(nll)
-    q_res = np.exp(-1.0 * nll_np)
-    return q_res
+    # q_res = np.exp(-1.0 * nll_np)
+    log_q_res = -1.0 * nll_np
+    return log_q_res
 
 # measure FID
 
@@ -151,12 +153,13 @@ def measure_inception_score_on_sampled_images(images):
 def measure_fdiv_on_sampled_images(p,q):
     
     kld_res, _ = kld(p, q)
-    tvd_res, _ = tvd(p, q)
-    chi2p_res, _ = chi2_pearson(p, q)
-    alpha25_res, _ = alphadiv(p, q, alpha=0.25)
-    alpha50_res, _ = alphadiv(p, q, alpha=0.5)
-    alpha75_res, _ = alphadiv(p, q, alpha=0.75)
-    fdiv_res = (kld_res, tvd_res, chi2p_res, alpha25_res, alpha50_res, alpha75_res)
+#    tvd_res, _ = tvd(p, q)
+#    chi2p_res, _ = chi2_pearson(p, q)
+#    alpha25_res, _ = alphadiv(p, q, alpha=0.25)
+#    alpha50_res, _ = alphadiv(p, q, alpha=0.5)
+#    alpha75_res, _ = alphadiv(p, q, alpha=0.75)
+#    fdiv_res = (kld_res, tvd_res, chi2p_res, alpha25_res, alpha50_res, alpha75_res)
+    fdiv_res = (kld_res, 0, 0, 0, 0, 0)
     return fdiv_res
 
 def save_all_results_to_file(fdiv_res, g_loss, js_div, inception_score, fid, epoch, df, res_path): 

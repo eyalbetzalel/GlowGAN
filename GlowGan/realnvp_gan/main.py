@@ -207,7 +207,7 @@ def main(
         samples = samples.permute(0,3,1,2)
         # samples2, _ = data_utils.logit_transform(samples, reverse=True)
         log_prob = model.log_prob(samples)
-        log_prob = log_prob / batch_size
+        log_prob = log_prob / 32*32*3
         prob = torch.exp(log_prob)
         return samples, prob
 
@@ -244,7 +244,19 @@ def main(
     optimizer_G = torch.optim.Adam(generator.parameters(), lr=lr, betas=(opt.b1, opt.b2))
     optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=lr, betas=(opt.b1, opt.b2))
     Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
-
+    
+    # ----------
+    #  Load weights
+    # ----------
+    if os.path.isfile("/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/long_train_saved_models/generator.pt") and os.path.isfile("/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/long_train_saved_models/discriminator.pt"):
+        generator_load = torch.load("/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/long_train_saved_models/generator.pt")
+        curr_epoch = generator_load['epoch']
+        generator.load_state_dict(generator_load['model_state_dict'])
+        optimizer_G.load_state_dict(generator_load['optimizer_state_dict'])
+        discriminator_load = torch.load("/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/long_train_saved_models/discriminator.pt")
+        discriminator.load_state_dict(discriminator_load['model_state_dict'])
+        optimizer_D.load_state_dict(discriminator_load['optimizer_state_dict'])
+        
     # ----------
     #  Training
     # ----------
@@ -350,142 +362,143 @@ def main(
                 % (epoch, n_epochs, i, len(train_loader), d_loss.item(), g_loss.item())
                 )
                     
-            if epoch % 10 == 0 and flag_sample:
-
-                # ---------------------
-                #  Sampling
-                # ---------------------
-                
-                # Save samples from generator : 
-                fake_imgs = postprocess_fake(fake_imgs).permute(0,3,1,2)
-                grid = make_grid(fake_imgs[:30], nrow=6).permute(1,2,0)
-                
-                f = plt.figure(figsize=(10,10))
-                plt.imsave("./images3/sample_glow_batch_%d.png" % batches_done, grid.cpu().numpy())
-                plt.close(f)
-                
-                caption_str = "Epoch : " + str(epoch)
-                images = wandb.Image(grid.cpu().numpy(), caption=caption_str)
-                wandb.log({"Generator:": images})
-                
-                # Save training batch as refernce : 
-                
-                real_imgs = postprocess_fake(real_imgs).permute(0,3,1,2)
-                grid = make_grid(real_imgs[:30], nrow=6).permute(1,2,0)
-                
-                f = plt.figure(figsize=(10,10))
-                plt.imsave("./images3/gmmsd_example_batch_%d.png" % batches_done, grid.cpu().numpy())
-                plt.close(f)
-                
-                caption_str = "Epoch : " + str(epoch)
-                images = wandb.Image(grid.cpu().numpy(), caption=caption_str)
-                wandb.log({"GMMSD:": images})
-                
-                EPOCH = epoch
-                PATH = "generator.pt"
-                LOSS = g_loss.item()
-                
-                torch.save({
-                            'epoch': EPOCH,
-                            'model_state_dict': generator.state_dict(),
-                            'optimizer_state_dict': optimizer_G.state_dict(),
-                            'loss': LOSS,
-                            }, PATH)
-                            
-                EPOCH = epoch
-                PATH = "discriminator.pt"
-                LOSS = g_loss.item()
-                
-                torch.save({
-                            'epoch': EPOCH,
-                            'model_state_dict': discriminator.state_dict(),
-                            'optimizer_state_dict': optimizer_D.state_dict(),
-                            'loss': LOSS,
-                            }, PATH)
-            batches_done = batches_done + n_critic
+#            if epoch % 10 == 0 and flag_sample:
+#
+#                # ---------------------
+#                #  Sampling
+#                # ---------------------
+#                
+#                # Save samples from generator : 
+#                fake_imgs = postprocess_fake(fake_imgs).permute(0,3,1,2)
+#                grid = make_grid(fake_imgs[:30], nrow=6).permute(1,2,0)
+#                
+#                f = plt.figure(figsize=(10,10))
+#                plt.imsave("./images3/sample_glow_batch_%d.png" % batches_done, grid.cpu().numpy())
+#                plt.close(f)
+#                
+#                caption_str = "Epoch : " + str(epoch)
+#                images = wandb.Image(grid.cpu().numpy(), caption=caption_str)
+#                wandb.log({"Generator:": images})
+#                
+#                # Save training batch as refernce : 
+#                
+#                real_imgs = postprocess_fake(real_imgs).permute(0,3,1,2)
+#                grid = make_grid(real_imgs[:30], nrow=6).permute(1,2,0)
+#                
+#                f = plt.figure(figsize=(10,10))
+#                plt.imsave("./images3/gmmsd_example_batch_%d.png" % batches_done, grid.cpu().numpy())
+#                plt.close(f)
+#                
+#                caption_str = "Epoch : " + str(epoch)
+#                images = wandb.Image(grid.cpu().numpy(), caption=caption_str)
+#                wandb.log({"GMMSD:": images})
+#                
+#                EPOCH = epoch
+#                PATH = "generator.pt"
+#                LOSS = g_loss.item()
+#                
+#                torch.save({
+#                            'epoch': EPOCH,
+#                            'model_state_dict': generator.state_dict(),
+#                            'optimizer_state_dict': optimizer_G.state_dict(),
+#                            'loss': LOSS,
+#                            }, PATH)
+#                            
+#                EPOCH = epoch
+#                PATH = "discriminator.pt"
+#                LOSS = g_loss.item()
+#                
+#                torch.save({
+#                            'epoch': EPOCH,
+#                            'model_state_dict': discriminator.state_dict(),
+#                            'optimizer_state_dict': optimizer_D.state_dict(),
+#                            'loss': LOSS,
+#                            }, PATH)
+#            batches_done = batches_done + n_critic
         
-            if epoch % 10 == 0 and flag_sample:
-            
-    #############################################################################################################################################        
+            if i % 100 == 0 and flag_sample:
+                
+                # flag_sample = 0
                 
                 # Create ImageGPT Model :
-                 
-                samples, p_res = sample_images_from_generator(generator, n_samples=100)
+                
+                samples, log_p_res = sample_images_from_generator(generator, n_samples=100)
                 samples = samples.detach().cpu()  
-                p_res = p_res.detach().cpu()
+                log_p_res = log_p_res.detach().cpu()
                 samples_postproc = 2.0 * (samples - 0.5) # [0,1] --> [-1,1]
-                q_res = run_imagegpt_on_sampled_images(samples_postproc, image_gpt, batch_size)
+                log_q_res = run_imagegpt_on_sampled_images(samples_postproc, image_gpt, batch_size)
                 # inception_score_res = measure_inception_score_on_sampled_images(samples_postproc) # Low GPU resources. 
                 samples_postproc = postprocess_fake2(samples, save_image_flag = True)
                 path = save_sampled_images_to_path(samples_postproc, path="/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/samples_temp_small_train_set")
-                fid_res = measure_fid_on_sampled_images(path_test_dst = path, gpu_num="0")
+                # fid_res = measure_fid_on_sampled_images(path_test_dst = path, gpu_num="0")
                 delete_sampled_images_from_path(path)
-                p_res = p_res.tolist()
-                q_res = q_res.tolist()
-                fdiv_res = measure_fdiv_on_sampled_images(p_res, q_res)
+                import ipdb; ipdb.set_trace()
+                log_p_res = log_p_res.tolist()
+                log_q_res = log_q_res.tolist()
+                fdiv_res = measure_fdiv_on_sampled_images(log_p_res, log_q_res)
                 inception_score = 0.0
-                
+                print("KL = " + str(fdiv_res[0]))
     #############################################################################################################################################
-#        
-              # JS : 
-              
-                # Samples from realnvp : 
-                    
-                    # Sample from RealNVP:
-                
-                samples_realnvp, p_realnvp = sample_from_realnvp_for_js(generator, batch_size)
-                    
-                    # ImageGPT :
-                samples_realnvp_np = samples_realnvp.detach().cpu()
-                samples_realnvp_postproc = 2.0 * (samples_realnvp_np - 0.5) # [0,1] --> [-1,1] 
-                q_imagegpt = run_imagegpt_on_sampled_images(samples_realnvp_postproc, image_gpt, batch_size)
-                
-                # Samples from ImageGPT : 
-                
-                    # Sample from ImageGPT (train loader) :
-                samples_imagegpt1, _ = next(iter(train_loader)) # [-1, 1]
-                samples_imagegpt1 = samples_imagegpt1.detach().cpu()
-                samples_imagegpt2 = 0.5 * samples_imagegpt1 + 0.5 # [-1, 1] --> [0, 1]
-                
-                    # ImnageGPT : 
-                
-                p_imagegpt = run_imagegpt_on_sampled_images(samples_imagegpt1, image_gpt, batch_size) # samples_imagegpt1 --> [-1, 1]
-    
-                
-                    # RealNVP : 
-                log_q_realnvp = generator.log_prob(samples_imagegpt2.to("cuda:0").permute(0,3,1,2))
-                log_q_realnvp = log_q_realnvp / batch_size
-                q_realnvp = torch.exp(log_q_realnvp)
-                
-                
-                # Cals Jenson-Shannon Divergence :
-                js_div = calc_js_div(p_imagegpt, p_realnvp, q_imagegpt, q_realnvp)
-                # js_div = js_div.numpy()
-                
-                # Calc gradients : 
-                
-                # js : 
-                # loss_js = -1.0 * torch.log(torch.tensor(4.0)) + 2.0 * js_div
-                
-                # grad_js = calc_gradient(generator, loss_js)
-                # gan :
-                fake_imgs, _ = sample_images_from_generator(generator, batch_size, compute_grad=False)
-                fake_imgs = samples_realnvp.to("cuda:0")
-                fake_imgs = fake_imgs.to("cuda:0")
-                # valid = Variable(Tensor(fake_imgs.size(0), 1).fill_(1.0), requires_grad=False)
-                g_loss = adversarial_loss(discriminator(fake_imgs), valid)
-                # grad_gan = calc_gradient(generator, loss_js)
-                # output = cosine_similarity(grad_js, grad_gan)
-                
-                # Save all results: 
-                g_loss = g_loss.detach().cpu().numpy()
         
-                # g_loss = 0.0
-                js_div = js_div.detach().cpu().numpy()
-                df_res, res_list = save_all_results_to_file(fdiv_res, g_loss, js_div, inception_score, fid_res, epoch, df_res, res_path="/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/results/res_small_train_set.csv")
-                epoch, kld_res, tvd_res, chi2p_res, alpha25_res, alpha50_res, alpha75_res, inception_score, fid = res_list
-                wandb.log({"table": df_res})
-                flag_sample = 0
+#              # JS : 
+#              
+#                # Samples from realnvp : 
+#                    
+#                    # Sample from RealNVP:
+#                
+#                samples_realnvp, p_realnvp = sample_from_realnvp_for_js(generator, batch_size)
+#                    
+#                    # ImageGPT :
+#                samples_realnvp_np = samples_realnvp.detach().cpu()
+#                samples_realnvp_postproc = 2.0 * (samples_realnvp_np - 0.5) # [0,1] --> [-1,1] 
+#                q_imagegpt = run_imagegpt_on_sampled_images(samples_realnvp_postproc, image_gpt, batch_size)
+#                
+#                # Samples from ImageGPT : 
+#                
+#                    # Sample from ImageGPT (train loader) :
+#                samples_imagegpt1, _ = next(iter(train_loader)) # [-1, 1]
+#                samples_imagegpt1 = samples_imagegpt1.detach().cpu()
+#                samples_imagegpt2 = 0.5 * samples_imagegpt1 + 0.5 # [-1, 1] --> [0, 1]
+#                
+#                    # ImnageGPT : 
+#                
+#                p_imagegpt = run_imagegpt_on_sampled_images(samples_imagegpt1, image_gpt, batch_size) # samples_imagegpt1 --> [-1, 1]
+#    
+#                
+#                    # RealNVP : 
+#                log_q_realnvp = generator.log_prob(samples_imagegpt2.to("cuda:0").permute(0,3,1,2))
+#                log_q_realnvp = log_q_realnvp / batch_size
+#                q_realnvp = torch.exp(log_q_realnvp)
+#                
+#                
+#                # Cals Jenson-Shannon Divergence :
+#                js_div = calc_js_div(p_imagegpt, p_realnvp, q_imagegpt, q_realnvp)
+#                # js_div = js_div.numpy()
+#                
+#                # Calc gradients : 
+#                
+#                # js : 
+#                # loss_js = -1.0 * torch.log(torch.tensor(4.0)) + 2.0 * js_div
+#                
+#                # grad_js = calc_gradient(generator, loss_js)
+#                # gan :
+#                fake_imgs, _ = sample_images_from_generator(generator, batch_size, compute_grad=False)
+#                fake_imgs = samples_realnvp.to("cuda:0")
+#                fake_imgs = fake_imgs.to("cuda:0")
+#                # valid = Variable(Tensor(fake_imgs.size(0), 1).fill_(1.0), requires_grad=False)
+#                g_loss = adversarial_loss(discriminator(fake_imgs), valid)
+#                # grad_gan = calc_gradient(generator, loss_js)
+#                # output = cosine_similarity(grad_js, grad_gan)
+#                
+#                # Save all results: 
+#                g_loss = g_loss.detach().cpu().numpy()
+#        
+#                # g_loss = 0.0
+#                js_div = js_div.detach().cpu().numpy()
+#                df_res, res_list = save_all_results_to_file(fdiv_res, g_loss, js_div, inception_score, fid_res, epoch, df_res, res_path="/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/results/res_small_train_set.csv")
+#                epoch, kld_res, tvd_res, chi2p_res, alpha25_res, alpha50_res, alpha75_res, inception_score, fid = res_list
+#                wandb.log({"table": df_res})
+                
                 
 
 

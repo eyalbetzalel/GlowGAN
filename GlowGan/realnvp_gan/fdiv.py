@@ -15,7 +15,8 @@ def kld(p, q, revFlag=False):
         log_vec = (1.0 / (len(p) - 1)) * (q_np/p_np)
         # log_vec = (1.0 / (len(p) - 1)) * np.log(q_np / p_np) * (q_np / p_np)
     else:
-        log_vec = (1.0 / (len(p) - 1)) * np.log(p_np / q_np)
+        # log_vec = (1.0 / (len(p) - 1)) * np.log(p_np / q_np)
+        log_vec = (1.0 / (len(p) - 1)) * (p_np - q_np)
 
     xi = [0] * len(p)
 
