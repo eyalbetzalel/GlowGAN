@@ -25,7 +25,6 @@ def sample_images_from_generator(model, n_samples, compute_grad=False):
                 samples, _ = data_utils.logit_transform(samples, reverse=True)
                 samples = torch.clamp(samples,0,1)
                 log_prob = model.log_prob(samples)
-                log_prob /= (32*32*3) # avarge log probability per pixel
                 samples_all = torch.cat((samples_all,samples.detach().cpu()), dim=0)
                 log_prob_all = torch.cat((log_prob_all, log_prob.detach().cpu()), dim=0)
                 count += 32
@@ -42,6 +41,7 @@ def sample_images_from_generator(model, n_samples, compute_grad=False):
     print("--- Finish : sample 5K images ---")
     # p = torch.exp(log_prob_all)
     samples_all = samples_all.permute(0,2,3,1)
+    log_prob_all += 32*32*3*np.log(256)
     return samples_all, log_prob_all
 
 # Files handeling:
@@ -103,7 +103,6 @@ def run_imagegpt_on_sampled_images(images, imagegpt_class, batch_size):
         # clusters are in (-1, 1)
         clustered_sampled_images = imagegpt_class.color_quantize(sampled_images_numpy)
         data_nll = imagegpt_class.eval_model(clustered_sampled_images)
-        data_nll = [j for i in data_nll for j in i] # flatten list
         nll.append(data_nll)
     nll = [j for i in nll for j in i] # flatten list
     nll_np = np.asarray(nll)

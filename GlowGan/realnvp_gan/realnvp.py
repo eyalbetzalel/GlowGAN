@@ -904,7 +904,6 @@ class RealNVP(nn.Module):
             log-likelihood of input.
         """
         z, log_diag_J = self.f(x)
-        import ipdb; ipdb.set_trace()
         log_det_J = torch.sum(log_diag_J, dim=(1, 2, 3))
         log_prior_prob = torch.sum(self.prior.log_prob(z), dim=(1, 2, 3))
         return log_prior_prob + log_det_J

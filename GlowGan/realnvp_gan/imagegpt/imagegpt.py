@@ -48,11 +48,25 @@ class ImageGPT:
         self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
         self.sess.run(tf.global_variables_initializer())
         self.saver.restore(self.sess, ckpt_path)
+        
+        vol = np.load("/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/imagegpt/vol.npy")
+        scale = np.power(256, 3)
+        vol = vol / scale
+        self.vol = vol
 
     def eval_model(self, x: np.array, y=None, quantize=False):
+        vol = self.vol
         if quantize:
             x = self.color_quantize(x)
-        return self.evaluate(self.sess, x, self.X, self.gen_loss)
+        out = self.evaluate(self.sess, x, self.X, self.gen_loss)
+        nll = [item for sublist in out for item in sublist]
+        nll = np.array(nll)
+        nll_new = np.zeros_like(nll)
+        for i in range(nll.shape[0]):
+            for j in range(nll.shape[1]): 
+                curr = vol[x[i, j]]
+                nll_new[i, j] = -1.0 * np.log(np.exp(-1.0 * nll[i, j]) * curr)
+        return np.sum(nll_new, axis=1)
 
     def color_quantize(self, x):
         """expect batch of images with channels last"""

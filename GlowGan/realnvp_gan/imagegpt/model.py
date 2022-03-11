@@ -203,7 +203,8 @@ def model(hparams, X, Y=None, past=None, scope='model', reuse=False):
             gen_losses = tf.reduce_sum(gen_losses * IM, axis=1) / tf.reduce_sum(IM, axis=1)
             results['gen_loss'] = tf.reduce_mean(gen_losses)
         else:
-            results['gen_loss'] = tf.reduce_mean(gen_losses, axis=1)
+            # results['gen_loss'] = tf.reduce_mean(gen_losses, axis=1)
+            results['gen_loss'] = gen_losses
 
         # Classification loss.
         with tf.variable_scope('clf', reuse=reuse):

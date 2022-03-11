@@ -248,14 +248,14 @@ def main(
     # ----------
     #  Load weights
     # ----------
-    if os.path.isfile("/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/long_train_saved_models/generator.pt") and os.path.isfile("/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/long_train_saved_models/discriminator.pt"):
-        generator_load = torch.load("/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/long_train_saved_models/generator.pt")
-        curr_epoch = generator_load['epoch']
-        generator.load_state_dict(generator_load['model_state_dict'])
-        optimizer_G.load_state_dict(generator_load['optimizer_state_dict'])
-        discriminator_load = torch.load("/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/long_train_saved_models/discriminator.pt")
-        discriminator.load_state_dict(discriminator_load['model_state_dict'])
-        optimizer_D.load_state_dict(discriminator_load['optimizer_state_dict'])
+#    if os.path.isfile("/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/long_train_saved_models/generator.pt") and os.path.isfile("/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/long_train_saved_models/discriminator.pt"):
+#        generator_load = torch.load("/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/long_train_saved_models/generator.pt")
+#        curr_epoch = generator_load['epoch']
+#        generator.load_state_dict(generator_load['model_state_dict'])
+#        optimizer_G.load_state_dict(generator_load['optimizer_state_dict'])
+#        discriminator_load = torch.load("/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/long_train_saved_models/discriminator.pt")
+#        discriminator.load_state_dict(discriminator_load['model_state_dict'])
+#        optimizer_D.load_state_dict(discriminator_load['optimizer_state_dict'])
         
     # ----------
     #  Training
@@ -271,6 +271,7 @@ def main(
         ckpt_path='/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/imagegpt/artifacts/model.ckpt-1000000/model.ckpt-1000000',
         color_cluster_path='/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/imagegpt/artifacts/kmeans_centers.npy',
         )
+    last_res_df = pd.DataFrame(columns = ['Epoch', 'test', 'gen', 'fid'])
         
 #    lambda_gp = 10
 #    def compute_gradient_penalty(D, real_samples, fake_samples):
@@ -362,82 +363,122 @@ def main(
                 % (epoch, n_epochs, i, len(train_loader), d_loss.item(), g_loss.item())
                 )
                     
-#            if epoch % 10 == 0 and flag_sample:
-#
-#                # ---------------------
-#                #  Sampling
-#                # ---------------------
-#                
-#                # Save samples from generator : 
-#                fake_imgs = postprocess_fake(fake_imgs).permute(0,3,1,2)
-#                grid = make_grid(fake_imgs[:30], nrow=6).permute(1,2,0)
-#                
-#                f = plt.figure(figsize=(10,10))
-#                plt.imsave("./images3/sample_glow_batch_%d.png" % batches_done, grid.cpu().numpy())
-#                plt.close(f)
-#                
-#                caption_str = "Epoch : " + str(epoch)
-#                images = wandb.Image(grid.cpu().numpy(), caption=caption_str)
-#                wandb.log({"Generator:": images})
-#                
-#                # Save training batch as refernce : 
-#                
-#                real_imgs = postprocess_fake(real_imgs).permute(0,3,1,2)
-#                grid = make_grid(real_imgs[:30], nrow=6).permute(1,2,0)
-#                
-#                f = plt.figure(figsize=(10,10))
-#                plt.imsave("./images3/gmmsd_example_batch_%d.png" % batches_done, grid.cpu().numpy())
-#                plt.close(f)
-#                
-#                caption_str = "Epoch : " + str(epoch)
-#                images = wandb.Image(grid.cpu().numpy(), caption=caption_str)
-#                wandb.log({"GMMSD:": images})
-#                
-#                EPOCH = epoch
-#                PATH = "generator.pt"
-#                LOSS = g_loss.item()
-#                
-#                torch.save({
-#                            'epoch': EPOCH,
-#                            'model_state_dict': generator.state_dict(),
-#                            'optimizer_state_dict': optimizer_G.state_dict(),
-#                            'loss': LOSS,
-#                            }, PATH)
-#                            
-#                EPOCH = epoch
-#                PATH = "discriminator.pt"
-#                LOSS = g_loss.item()
-#                
-#                torch.save({
-#                            'epoch': EPOCH,
-#                            'model_state_dict': discriminator.state_dict(),
-#                            'optimizer_state_dict': optimizer_D.state_dict(),
-#                            'loss': LOSS,
-#                            }, PATH)
-#            batches_done = batches_done + n_critic
+            if epoch % 5 == 0 and flag_sample:
+
+                # ---------------------
+                #  Sampling
+                # ---------------------
+                
+                # Save samples from generator : 
+                fake_imgs = postprocess_fake(fake_imgs).permute(0,3,1,2)
+                grid = make_grid(fake_imgs[:30], nrow=6).permute(1,2,0)
+                
+                f = plt.figure(figsize=(10,10))
+                plt.imsave("./images3/sample_glow_batch_%d.png" % batches_done, grid.cpu().numpy())
+                plt.close(f)
+                
+                caption_str = "Epoch : " + str(epoch)
+                images = wandb.Image(grid.cpu().numpy(), caption=caption_str)
+                wandb.log({"Generator:": images})
+                
+                # Save training batch as refernce : 
+                
+                real_imgs = postprocess_fake(real_imgs).permute(0,3,1,2)
+                grid = make_grid(real_imgs[:30], nrow=6).permute(1,2,0)
+                
+                f = plt.figure(figsize=(10,10))
+                plt.imsave("./images3/gmmsd_example_batch_%d.png" % batches_done, grid.cpu().numpy())
+                plt.close(f)
+                
+                caption_str = "Epoch : " + str(epoch)
+                images = wandb.Image(grid.cpu().numpy(), caption=caption_str)
+                wandb.log({"GMMSD:": images})
+                
+                EPOCH = epoch
+                PATH = "generator.pt"
+                LOSS = g_loss.item()
+                
+                torch.save({
+                            'epoch': EPOCH,
+                            'model_state_dict': generator.state_dict(),
+                            'optimizer_state_dict': optimizer_G.state_dict(),
+                            'loss': LOSS,
+                            }, PATH)
+                            
+                EPOCH = epoch
+                PATH = "discriminator.pt"
+                LOSS = g_loss.item()
+                
+                torch.save({
+                            'epoch': EPOCH,
+                            'model_state_dict': discriminator.state_dict(),
+                            'optimizer_state_dict': optimizer_D.state_dict(),
+                            'loss': LOSS,
+                            }, PATH)
+            batches_done = batches_done + n_critic
         
-            if i % 100 == 0 and flag_sample:
+            if epoch % 5 == 0 and flag_sample:
                 
-                # flag_sample = 0
+                flag_sample = 0
                 
-                # Create ImageGPT Model :
+                # Sample from GAN --> Test on ImageGPT :
                 
-                samples, log_p_res = sample_images_from_generator(generator, n_samples=100)
+                samples, log_p_res = sample_images_from_generator(generator, n_samples=5000)
                 samples = samples.detach().cpu()  
                 log_p_res = log_p_res.detach().cpu()
                 samples_postproc = 2.0 * (samples - 0.5) # [0,1] --> [-1,1]
                 log_q_res = run_imagegpt_on_sampled_images(samples_postproc, image_gpt, batch_size)
+                
+                # Calc FID : 
+                
                 # inception_score_res = measure_inception_score_on_sampled_images(samples_postproc) # Low GPU resources. 
                 samples_postproc = postprocess_fake2(samples, save_image_flag = True)
                 path = save_sampled_images_to_path(samples_postproc, path="/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/samples_temp_small_train_set")
-                # fid_res = measure_fid_on_sampled_images(path_test_dst = path, gpu_num="0")
+                fid_res = measure_fid_on_sampled_images(path_test_dst = path, gpu_num="0")
                 delete_sampled_images_from_path(path)
-                import ipdb; ipdb.set_trace()
-                log_p_res = log_p_res.tolist()
-                log_q_res = log_q_res.tolist()
-                fdiv_res = measure_fdiv_on_sampled_images(log_p_res, log_q_res)
-                inception_score = 0.0
-                print("KL = " + str(fdiv_res[0]))
+                
+                # Sample from test set --> test on GAN generator: 
+                
+                
+                curr_avg_log_prob = 0.0
+                for i, (imgs, _) in enumerate(test_loader):
+            
+                    if imgs.size(0) != batch_size:
+                        continue
+                      
+                    real_imgs = Variable(imgs.type(Tensor))
+                    real_imgs = 0.5 * real_imgs + 0.5
+                    with torch.no_grad():
+                        test_set_log_prob = generator.log_prob(real_imgs.permute(0,3,1,2))
+                        test_set_log_prob += 32*32*3*np.log(256)
+                        curr_avg_log_prob += torch.mean(test_set_log_prob)
+                    
+                curr_avg_log_prob /= len(test_loader)
+
+                
+                curr_avg_log_prob = curr_avg_log_prob.item()
+                log_q_res = np.mean(log_q_res)
+                wandb.log({"epoch": epoch})
+                wandb.log({"s_gan_eval_imagegpt": log_q_res})
+                wandb.log({"fid": fid_res})
+                wandb.log({"s_imagegpt_eval_gan": curr_avg_log_prob})
+                
+                last_res_df = pd.DataFrame(columns = ['Epoch', 'test', 'gen', 'fid'])
+                
+                last_res_df = last_res_df.append({
+                'Epoch':epoch,
+                'test':curr_avg_log_prob, 
+                'gen':log_q_res, 
+                'fid':fid_res
+                }, ignore_index=True)
+                
+                last_res_df.to_csv('last_res.csv')
+                
+                # log_p_res = log_p_res.tolist()
+                # log_q_res = log_q_res.tolist()
+                # fdiv_res = measure_fdiv_on_sampled_images(log_p_res, log_q_res)
+                # inception_score = 0.0
+                # print("KL = " + str(fdiv_res[0]))
     #############################################################################################################################################
         
 #              # JS : 
