@@ -423,7 +423,7 @@ def main(
                 
                 # Sample from GAN --> Test on ImageGPT :
                 
-                samples, log_p_res = sample_images_from_generator(generator, n_samples=5000)
+                samples, log_p_res = sample_images_from_generator(generator, n_samples=500)
                 samples = samples.detach().cpu()  
                 log_p_res = log_p_res.detach().cpu()
                 samples_postproc = 2.0 * (samples - 0.5) # [0,1] --> [-1,1]
@@ -431,7 +431,9 @@ def main(
                 
                 # Calc FID : 
                 
-                # inception_score_res = measure_inception_score_on_sampled_images(samples_postproc) # Low GPU resources. 
+                
+                
+                inception_score_res = measure_inception_score_on_sampled_images(samples_postproc) # Low GPU resources. 
                 samples_postproc = postprocess_fake2(samples, save_image_flag = True)
                 path = save_sampled_images_to_path(samples_postproc, path="/home/dsi/eyalbetzalel/GlowGAN/GlowGan/realnvp_gan/samples_temp_small_train_set")
                 fid_res = measure_fid_on_sampled_images(path_test_dst = path, gpu_num="0")
@@ -448,31 +450,46 @@ def main(
                       
                     real_imgs = Variable(imgs.type(Tensor))
                     real_imgs = 0.5 * real_imgs + 0.5
+                    test_set_log_prob_arr = []
                     with torch.no_grad():
                         test_set_log_prob = generator.log_prob(real_imgs.permute(0,3,1,2))
+                        test_set_log_prob = test_set_log_prob.detach()
                         test_set_log_prob += 32*32*3*np.log(256)
                         curr_avg_log_prob += torch.mean(test_set_log_prob)
+                        test_set_log_prob_arr.append(test_set_log_prob)
                     
                 curr_avg_log_prob /= len(test_loader)
-
+                
+                vec = torch.squeeze(torch.reshape(torch.stack(test_set_log_prob_arr),[1,-1]))
+                test_set_log_prob_median = torch.median(vec).item() 
+                
+                res_th = torch.sum(vec > -1.0 * np.power(10,8)).item()/ vec.shape[0]
                 
                 curr_avg_log_prob = curr_avg_log_prob.item()
-                log_q_res = np.mean(log_q_res)
+                log_q_res_mean = np.mean(log_q_res)
+                log_q_res_median = np.median(log_q_res)
                 wandb.log({"epoch": epoch})
-                wandb.log({"s_gan_eval_imagegpt": log_q_res})
+                wandb.log({"s_gan_eval_imagegpt_mean": log_q_res_mean})
+                wandb.log({"s_gan_eval_imagegpt_median": log_q_res_median})
                 wandb.log({"fid": fid_res})
-                wandb.log({"s_imagegpt_eval_gan": curr_avg_log_prob})
+                wandb.log({"s_imagegpt_eval_gan_mean": curr_avg_log_prob})
+                wandb.log({"s_imagegpt_eval_gan_median": test_set_log_prob_median})
+                wandb.log({"s_imagegpt_eval_gan_th": res_th})
+                wandb.log({"is": inception_score_res})
                 
                 last_res_df = pd.DataFrame(columns = ['Epoch', 'test', 'gen', 'fid'])
                 
                 last_res_df = last_res_df.append({
                 'Epoch':epoch,
-                'test':curr_avg_log_prob, 
-                'gen':log_q_res, 
-                'fid':fid_res
-                }, ignore_index=True)
+                "s_imagegpt_eval_gan_mean": curr_avg_log_prob,
+                "s_imagegpt_eval_gan_median": test_set_log_prob_median, 
+                "s_gan_eval_imagegpt_mean": log_q_res_mean,
+                "s_gan_eval_imagegpt_median": log_q_res_median,
+                "s_imagegpt_eval_gan_th": res_th,
+                "fid": fid_res,
+                "is": inception_score_res}, ignore_index=True)
                 
-                last_res_df.to_csv('last_res.csv')
+                last_res_df.to_csv('last_res.csv', mode='a', header=False)
                 
                 # log_p_res = log_p_res.tolist()
                 # log_q_res = log_q_res.tolist()

@@ -144,7 +144,7 @@ def measure_inception_score_on_sampled_images(images):
     images = images.permute(0, 3, 1, 2)
     dataset = torch.utils.data.TensorDataset(images)
     inception_score_res = inception_score(dataset, cuda=True, batch_size=32, resize=True, splits=1)
-
+    inception_score_res = np.mean(np.array(inception_score_res))
     return inception_score_res
 
 # measure f-div

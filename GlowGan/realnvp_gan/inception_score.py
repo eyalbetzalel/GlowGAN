@@ -35,6 +35,7 @@ def inception_score(imgs, cuda=True, batch_size=32, resize=False, splits=1):
 
     # Load inception model
     inception_model = inception_v3(pretrained=True, transform_input=False).type(dtype)
+    inception_model.to("cuda:3")
     inception_model.eval();
     up = nn.Upsample(size=(299, 299), mode='bilinear').type(dtype)
     def get_pred(x):
@@ -49,6 +50,7 @@ def inception_score(imgs, cuda=True, batch_size=32, resize=False, splits=1):
     for i, batch in enumerate(dataloader, 0):
         batch = batch[0]
         batch = batch.type(dtype)
+        batch = batch.to("cuda:3")
         batchv = Variable(batch)
         batch_size_i = batch.size()[0]
 
